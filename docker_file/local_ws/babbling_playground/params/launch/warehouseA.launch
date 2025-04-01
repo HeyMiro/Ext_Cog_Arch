@@ -1,5 +1,0 @@
-<?xml version="1.0"?>
-<launch>
-    <rosparam command="load" file="$(find params_pkg)/params/warehouseA.yaml" />
-    <node pkg="params_pkg" type="robot_node" name="robot_node" output="screen"/>
-</launch>

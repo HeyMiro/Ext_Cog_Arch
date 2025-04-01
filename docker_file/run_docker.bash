@@ -7,7 +7,7 @@ docker run -it \
        --env="DISPLAY=$DISPLAY" \
        --env="QT_X11_NO_MITSHM=1" \
        --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw" \
-       --volume="/home/primi/docker_file:/docker-ros" \
+       --volume="/home/cavaa/docker_file:/docker-ros" \
        --env="XAUTHORITY=$XAUTH" \
        --volume="$XAUTH:$XAUTH" \
        --net=host \
@@ -18,7 +18,7 @@ docker run -it \
        --env="PULSE_SERVER=unix:/run/user/1000/pulse/native" \
        --volume="/run/user/1000/pulse:/run/user/1000/pulse" \
        --volume="$HOME/.config/pulse/cookie:/root/.config/pulse/cookie" \
-       ros_miro:v2.0 \
+       aung9htet/ros_miro:public \
        bash
 
 echo "Done"
