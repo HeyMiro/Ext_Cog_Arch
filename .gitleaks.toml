@@ -32,7 +32,10 @@ description = "API key stored in a file"
 path = '''(^|/)api_key[^/]*\.txt$'''
 
 [allowlist]
-description = "binary assets and the secrets template"
+description = "binary assets, the secrets template, and the obviously fake test values (xxx-SECRET-1234)"
+regexes = [
+	'''-SECRET-''',
+]
 paths = [
 	'''\.(wav|mp3|ppn|task|png|jpg)$''',
 	'''config/secrets\.env\.example$''',

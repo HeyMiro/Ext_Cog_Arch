@@ -18,7 +18,7 @@
 
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=tools/demo_launch.bash
+# shellcheck source-path=SCRIPTDIR source=tools/demo_launch.bash
 source "$HERE/tools/demo_launch.bash"
 
 EXT_MIC=0

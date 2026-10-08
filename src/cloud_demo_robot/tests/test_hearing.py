@@ -36,9 +36,16 @@ def secs_to_frames(s):
 	return int(np.ceil(s * 16000.0 / FRAME))
 
 
+# the robot copy's hearing settings (MiRo's own mics, touch detection on);
+# set explicitly so the same tests pass in the sim copy too
+ROBOT_MICS = "hearing.input_topic=sensors/mics;hearing.touch_from_mics=true"
+
+
 def make_sys(environ=None):
 
-	hm = heymiro_config.load(environ=environ or {})
+	environ = dict(environ or {})
+	environ["HEYMIRO_SET"] = ROBOT_MICS + (";" + environ["HEYMIRO_SET"] if environ.get("HEYMIRO_SET") else "")
+	hm = heymiro_config.load(environ=environ)
 	return types.SimpleNamespace(
 		pars=types.SimpleNamespace(forebrain=hm),
 		kc_s=None, kc_m=None,

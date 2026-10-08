@@ -1,0 +1,15 @@
+# Pre-recorded voice clips (24 kHz mono 16-bit WAV, generated with
+# ElevenLabs by tools/make_clip.py). Each category lists phrase folders
+# under assets/clips/; one wav is picked at random (no immediate repeat).
+#
+# category: [phrase_folder, ...]
+
+greeting: [hmm_inquisitive, whats_up, hi_there, hi, hey]
+goodbye: [adi_os_amig_os, ciao_bella_bacios_bacios_mwah_mwah, it_was_nice_talking_to_you_bye, see_ya_later_alligator_hahaha, bye_bye]
+thinking: [hmm_thinking]
+acknowledge: [hmm, hmmm]
+loading: [loading]
+pleased: [mhmph, mhmphe, mmhmph]
+ouch_ear: [ouch, owwyy, dont_touch_my_ears_please, cut_it_out]
+ouch_tail: [ouch, owwyy, my_tail, stop_that]
+dance_start: [yeah_i_love_that_one, yipeeee_lets_dance, sure, oh_boy_lets_goooooo]

@@ -534,7 +534,7 @@ class TestNodeScene(unittest.TestCase):
 		with contextlib.redirect_stdout(out):
 			sys_, scene = make_node(**{"scene.undistort": "true", "platform": "sim"})
 		self.assertIsNone(scene.undistort)
-		sys_, scene = make_node(**{"scene.undistort": "true"})
+		sys_, scene = make_node(**{"scene.undistort": "true", "platform": "robot"})
 		self.assertIsNotNone(scene.undistort)
 		with_models(scene, gestures=[])
 		now = time.time()

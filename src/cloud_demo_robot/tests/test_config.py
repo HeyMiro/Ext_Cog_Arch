@@ -22,6 +22,10 @@ from heymiro_config import HeyMiroConfig
 
 
 # distinctive values, so a leak is easy to spot
+# the robot copy's hearing settings (the sim copy's config differs; the
+# same tests run in both copies)
+ROBOT_MICS = "hearing.input_topic=sensors/mics;hearing.touch_from_mics=true"
+
 SECRETS = {
 	"OPENAI_API_KEY": "sk-openai-SECRET-1111",
 	"HEYMIRO_LLM_API_KEY": "llm-SECRET-2222",
@@ -159,7 +163,8 @@ class TestSettings(ConfigTestCase):
 
 		cfg = self.load().cfg
 		self.assertEqual(cfg.llm.model, "gpt-4o")
-		self.assertEqual(cfg.hearing.input_topic, "sensors/mics")
+		# robot copy: sensors/mics; sim copy: host/mics (the tests run in both)
+		self.assertIn(cfg.hearing.input_topic, ["sensors/mics", "host/mics"])
 		self.assertEqual(cfg.get("hearing.touch_noise.zcr_min"), 190)
 		self.assertIsNone(cfg.get("hearing.no_such_key"))
 		self.assertEqual(cfg.get("no.such.key", 3), 3)
@@ -296,7 +301,7 @@ class TestFeatures(ConfigTestCase):
 
 	def test_everything_off_without_keys(self):
 
-		cfg = self.load({"HEYMIRO_SET": "features.spotify=true"})
+		cfg = self.load({"HEYMIRO_SET": "features.spotify=true;" + ROBOT_MICS})
 		f = cfg.features
 		self.assertFalse(f.conversation)
 		self.assertFalse(f.wake_word)
