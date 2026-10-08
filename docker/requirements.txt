@@ -1,0 +1,28 @@
+# Python packages for the Hey MiRo cloud demo (Python 3.8 / ROS Noetic).
+# torch/torchvision are installed first from the PyTorch index (see Dockerfile).
+# Change dependencies here (and rebuild via CI) - not inside a running container.
+
+# cloud (P4): OpenAI-compatible STT + chat (v1 SDK; 2.7.2+ needs Python 3.9)
+openai>=1.55.3,<2
+requests>=2.31,<3
+
+# hearing: wake words (v3 runtime matches the *_v3_0_0.ppn files) + VAD
+pvporcupine==3.0.4
+pvcobra==2.0.4
+
+# host audio (PortAudio through the ALSA->PulseAudio plugin)
+sounddevice==0.5.1
+soundfile==0.12.1
+
+# scene awareness: YOLO objects + mediapipe hand gestures
+ultralytics>=8.3,<8.4
+mediapipe==0.10.11
+opencv-python==4.10.0.84
+opencv-contrib-python==4.10.0.84
+
+# stock MDK demo (AprilTag detection in the camera clients)
+apriltag==0.0.16
+
+# numerics
+numpy==1.24.4
+scipy==1.10.1

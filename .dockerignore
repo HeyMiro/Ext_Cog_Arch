@@ -1,0 +1,6 @@
+# The image is an environment only: no project code, assets or keys may
+# enter the build context. Only docker/ is sent (see docker/Dockerfile).
+# (An optional docker/mdk/mdk_2-*.tgz is bind-mounted during the build and
+# never becomes an image layer.)
+*
+!docker/

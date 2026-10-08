@@ -1,0 +1,131 @@
+# Build the Hey MiRo environment image (ROS Noetic + MiRo MDK + Python deps;
+# no project code) and publish it to GitHub Container Registry.
+#
+#   ghcr.io/heymiro/ext_cog_arch:latest      default branch
+#   ghcr.io/heymiro/ext_cog_arch:<branch>    other branches
+#   ghcr.io/heymiro/ext_cog_arch:sha-<sha>   every build
+#   ghcr.io/heymiro/ext_cog_arch:<x.y.z>     tags vX.Y.Z
+#
+# The "test" stage of docker/Dockerfile runs docker/smoke_test.sh; the image
+# is only pushed if it passes. Changes under src/ do not rebuild the image
+# (the code is bind-mounted at run time).
+
+name: docker-image
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*.*.*"]
+    paths:
+      - "docker/**"
+      - ".dockerignore"
+      - ".github/workflows/docker-image.yml"
+  pull_request:
+    paths:
+      - "docker/**"
+      - ".dockerignore"
+      - ".github/workflows/docker-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/heymiro/ext_cog_arch
+  MDK_TGZ: docker/mdk/mdk_2-230105.tgz
+  MDK_GDRIVE_ID: 1vNODaenljocVWalM4cOW4Kax-RB4U3nh
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Free disk space (the image is ~12 GB)
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - uses: actions/checkout@v4
+
+      - name: Cache the MDK tarball (download from Google Drive at most once)
+        id: mdk-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MDK_TGZ }}
+          key: mdk-2-230105-v1
+
+      - name: Download the MDK
+        if: steps.mdk-cache.outputs.cache-hit != 'true'
+        run: |
+          python3 -m pip install --quiet gdown==5.2.0
+          python3 -m gdown "https://drive.google.com/uc?id=${MDK_GDRIVE_ID}" -O "$MDK_TGZ"
+          sha256sum "$MDK_TGZ"
+          tar -tzf "$MDK_TGZ" | head -n 5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and smoke-test (test stage)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: test
+          platforms: linux/amd64
+          push: false
+          build-args: |
+            TORCH_VARIANT=cu121
+            MDK_SHA256=${{ vars.MDK_SHA256 }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+
+      - name: Push the environment image
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: env
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            TORCH_VARIANT=cu121
+            MDK_SHA256=${{ vars.MDK_SHA256 }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+
+      - name: Disk usage
+        if: always()
+        run: df -h

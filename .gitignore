@@ -1,0 +1,25 @@
+# --- secrets: never commit keys --------------------------------------------
+# keep your real secrets in ~/.config/heymiro/secrets.env (see README)
+*.env
+!*.env.example
+**/api_key/
+api_key*.txt
+**/heymiro.local.yaml
+
+# --- runtime artefacts ---------------------------------------------------------
+__pycache__/
+*.pyc
+*.pt
+*.onnx
+**/recordings/
+**/logs/
+*.log
+
+# --- docker build inputs ------------------------------------------------------
+docker/mdk/*.tgz
+docker/mdk/*.tar.gz
+
+# --- editors ------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
