@@ -60,7 +60,7 @@ RUN mv /etc/apt/sources.list.d/ros1-latest.list /tmp/ 2>/dev/null || true; \
 # --- 2. system packages ------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
 		python3-pip python3-dev python3-yaml python3-catkin-tools \
-		build-essential cmake git wget sudo lsb-release iproute2 iputils-ping nano less procps \
+		build-essential cmake git wget sudo lsb-release iproute2 iputils-ping net-tools nano less procps \
 		ffmpeg libportaudio2 portaudio19-dev libasound2-dev libasound2-plugins alsa-utils \
 		pulseaudio-utils libsndfile1 \
 		libgl1 libglib2.0-0 mesa-utils x11-xserver-utils xauth \
@@ -93,14 +93,15 @@ RUN --mount=type=bind,source=docker/mdk,target=/tmp/mdk-local \
 	sed -i '/# MDK/d; /mdk\/setup.bash/d' /root/.bashrc; \
 	test -e /root/mdk/setup.bash
 
+# (the MDK setup script probes the network; tolerate its warnings)
 RUN set -e; \
 	source /opt/ros/noetic/setup.bash; \
-	source /root/mdk/setup.bash; \
+	source /root/mdk/setup.bash || true; \
 	cd /root/mdk/catkin_ws; \
 	catkin clean -y; \
 	catkin build --no-status; \
 	cd build/miro2_msg && make install; \
-	source /root/mdk/catkin_ws/devel/setup.bash; \
+	source /root/mdk/catkin_ws/devel/setup.bash || true; \
 	python3 -c "import miro2, miro2_msg.msg; print('MDK python OK')"
 
 # --- 4. Python packages ----------------------------------------------------------------

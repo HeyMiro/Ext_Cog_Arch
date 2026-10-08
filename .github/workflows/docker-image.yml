@@ -106,7 +106,7 @@ jobs:
           push: false
           build-args: |
             TORCH_VARIANT=cu121
-            MDK_SHA256=${{ vars.MDK_SHA256 }}
+            MDK_SHA256=${{ vars.MDK_SHA256 || 'b1b4341a1b36a89eacee270f09c84eb4e2ddd17faa72e80c115430175a24ceba' }}
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
 
       - name: Push the environment image
@@ -122,7 +122,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             TORCH_VARIANT=cu121
-            MDK_SHA256=${{ vars.MDK_SHA256 }}
+            MDK_SHA256=${{ vars.MDK_SHA256 || 'b1b4341a1b36a89eacee270f09c84eb4e2ddd17faa72e80c115430175a24ceba' }}
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
 

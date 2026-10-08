@@ -1,0 +1,147 @@
+# Hey MiRo - cloud demo settings (cloud_demo_sim: MiRo Gazebo simulator)
+#
+# Non-secret settings only. API keys and API routes (base URLs) are read
+# from the secrets file / environment - see config/secrets.env.example at
+# the repository root and docs/configuration.md.
+#
+# Overrides, in increasing precedence:
+#   config/heymiro.local.yaml          (gitignored, your personal tweaks)
+#   $HEYMIRO_CONFIG                    (path to another YAML overlay)
+#   $HEYMIRO_SET="a.b=c;d.e=f"         (one-off overrides, e.g. from run_robot.sh)
+#
+# Relative paths are resolved from the project root (the folder holding
+# config/, core/ and assets/).
+
+platform: sim                   # robot | sim (checked against the simulator flag at runtime)
+
+mdk:
+  # demo flags forced on top of platform_parameters (see pars.py
+  # action_demo_flags): v = vocaliser off, x = special (AprilTag) responses
+  # off, S = no orienting to sound (a mono host mic gives no direction).
+  # If the simulated light makes MiRo sleepy add "s"; if phantom cliffs
+  # make it back away add "cu".
+  demo_flags: "vxS"
+
+features:
+  conversation: true            # "Hey MiRo" -> Whisper -> GPT -> ElevenLabs
+  wake_word: true               # Porcupine wake words (needs PICOVOICE_ACCESS_KEY)
+  dance: true                   # "Dance MiRo" / "can you dance to ..."
+  tricks: true                  # gesture tricks (mediapipe)
+  identify: true                # object game (YOLO)
+  touch_reactions: true         # ear/tail scratch -> "Ouch!" clips (MiRo mics only)
+  purr: true                    # pleased noises when stroked
+  sleep_command: true           # "go to sleep" honoured
+  spontaneous_gestures: false   # react to hand gestures without being asked
+  spotify: false                # optional song lookup (see cloud/music.py)
+  log_transcripts: false        # print what users said (privacy: off by default)
+
+hearing:
+  input_topic: host/mics        # the simulator has no mics: tools/host_audio_bridge.py publishes this
+  salience_topic: host/mics     # what the "- mics" client localises (loudness still drives arousal)
+  miro_channels: [0, 1]         # channels averaged for speech (0 = left ear, 1 = right ear)
+  gain: 1.0
+  wake_words:
+    - id: hey_miro
+      file: assets/wakewords/Hey-Miro_en_linux_v3_0_0.ppn
+      sensitivity: 0.6
+      access_key_env: PICOVOICE_ACCESS_KEY_HEY_MIRO
+    - id: dance_miro
+      file: assets/wakewords/Dance-MiRo_en_linux_v3_0_0.ppn
+      sensitivity: 0.6
+      access_key_env: PICOVOICE_ACCESS_KEY_DANCE_MIRO
+    - id: stop_miro
+      file: assets/wakewords/Stop-MiRo_en_linux_v3_0_0.ppn
+      sensitivity: 0.6
+      access_key_env: PICOVOICE_ACCESS_KEY_STOP_MIRO
+  vad: cobra                    # cobra | energy (energy needs no key)
+  vad_threshold: 0.6            # voice probability counted as speech
+  energy_threshold_dbfs: -38.0  # used by the energy VAD
+  onset_frames: 3               # consecutive voiced 32 ms frames to start an utterance
+  preroll_s: 0.5
+  end_silence_s: 3.0            # HRI paper: stop recording after ~3 s of silence
+  no_speech_timeout_s: 3.0      # ... and end the conversation if nobody speaks for 3 s
+  max_utterance_s: 20.0
+  self_hearing_guard_s: 0.6     # laptop speaker is close to the laptop mic (or use headphones)
+  touch_from_mics: false        # ear/tail scratch detection needs MiRo's own mics
+  touch_noise:
+    zcr_min: 190
+    peak_ear: 23000
+    peak_tail: 30000
+    hits_to_react: 4
+    window_s: 2.0
+    cooldown_s: 3.0
+
+voice:
+  backend: host                 # host = laptop / Bluetooth speaker; miro = MiRo's own speaker (8 kHz)
+  device: null                  # sounddevice output device (index or name substring); null = default
+  volume: 1.0
+  music_volume: 0.6
+  thinking_music: true          # "Hmm" + loading tune while the cloud is busy (HRI paper)
+
+tts:
+  provider: elevenlabs          # elevenlabs | none
+  model_id: eleven_multilingual_v2
+  voice_id: 0m2tDjDewtOfXrhxqgrJ
+  impression_voice_id: dfZGXKiIzjizWtJ0NgPy
+  stability: 0.5
+  similarity_boost: 0.75
+  timeout_s: 20
+
+stt:
+  model: whisper-1
+  language: en
+  timeout_s: 20
+
+llm:
+  model: gpt-4o
+  temperature: 0.8
+  max_tokens: 400
+  json_mode: true
+  timeout_s: 25
+  max_history_turns: 10
+  persona_file: config/persona.md
+  event_name: the Festival of Mind
+  object_comment_model: gpt-4o-mini
+
+converse:
+  face_user: none               # apriltag | sound | none (no tag in the simulated world)
+  face_rotate_speed: 0.08       # rad/s turning while looking for the tag
+  face_timeout_s: 8.0
+  spin_speed: 0.4
+  spin_s: 3.0
+  preempt_abort_s: 10.0         # end the conversation if pre-empted for this long
+
+dance:
+  songs_manifest: config/songs.yaml
+  max_duration_s: 60.0
+  default_bpm: 120.0
+  wheels: true
+  allow_translation: true
+
+tricks:
+  duration_s: 20.0
+  max_tricks: 5
+  min_score: 0.6
+  map:
+    Open_Palm: greet
+    Pointing_Up: spin
+    Victory: ears
+    ILoveYou: party
+
+identify:
+  duration_s: 15.0
+  confirm: [4, 10]              # object seen in 4 of the last 10 detections
+  classes: [car, book, cell phone, mouse, apple, banana, orange, cup, fork, knife, spoon, bottle, sports ball]
+
+scene:
+  rate_hz: 1.0                  # leave CPU for Gazebo
+  camera: caml
+  yolo_weights: yolov10m.pt     # downloaded on first use into $HEYMIRO_CACHE_DIR/weights
+  yolo_conf: 0.4
+  gesture_model: assets/models/gesture_recognizer.task
+  device: auto                  # auto | cpu | cuda
+  undistort: false
+  intrinsics: null              # {camera_matrix: [[...]], dist_coeffs: [...]} if undistort is true
+
+clips:
+  manifest: config/clips.yaml

@@ -3,9 +3,9 @@
 # Environment smoke test (run by the Dockerfile "test" stage in CI).
 # Checks the environment only: no robot, no audio device, no API keys.
 
-set -e
 # shellcheck disable=SC1091
 source /opt/heymiro/heymiro_env.bash
+set -e
 
 echo "== python"
 python3 - <<'PY'
