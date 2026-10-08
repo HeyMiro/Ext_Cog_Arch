@@ -1,5 +1,5 @@
 # Python packages for the Hey MiRo cloud demo (Python 3.8 / ROS Noetic).
-# torch/torchvision are installed first from the PyTorch index (see Dockerfile).
+# torch==2.4.1/torchvision==0.19.1 are installed together with these (see Dockerfile).
 # Change dependencies here (and rebuild via CI) - not inside a running container.
 
 # cloud (P4): OpenAI-compatible STT + chat (v1 SDK; 2.7.2+ needs Python 3.9)

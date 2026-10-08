@@ -58,7 +58,7 @@ ext_cog_arch → Package settings → Change visibility.
 ```bash
 docker/build_image.bash                              # MDK downloaded from Google Drive
 docker/build_image.bash --mdk ~/Downloads/mdk_2-230105.tgz
-docker/build_image.bash --cpu --tag heymiro-env:cpu  # CPU-only torch (smaller)
+docker/build_image.bash --cpu --tag heymiro-env:cpu  # CPU-only torch build
 docker/build_image.bash --test                       # build and run the smoke test
 ./docker/run_docker.bash --image heymiro-env:local --sim
 ```
