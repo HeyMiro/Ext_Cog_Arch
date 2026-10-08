@@ -1,0 +1,39 @@
+# gitleaks configuration: the default rules plus the services this
+# project uses, so a key pasted into code never reaches GitHub again.
+title = "Hey MiRo gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "picovoice-access-key"
+description = "Picovoice AccessKey"
+regex = '''(?i)(access_?key|picovoice)[^\n]{0,30}?['"=:\s]([A-Za-z0-9+/]{50,64}={0,2})'''
+secretGroup = 2
+keywords = ["access_key", "accesskey", "picovoice"]
+
+[[rules]]
+id = "elevenlabs-api-key"
+description = "ElevenLabs API key"
+regex = '''(?i)(elevenlabs|xi-api-key|api_key)[^\n]{0,30}?['"=:\s](sk_[0-9a-f]{40,64}|[0-9a-f]{32})\b'''
+secretGroup = 2
+keywords = ["elevenlabs", "xi-api-key", "api_key"]
+
+[[rules]]
+id = "spotify-client-secret"
+description = "Spotify client id/secret"
+regex = '''(?i)(client_secret|client_id|spotify)[^\n]{0,30}?['"=:\s]([0-9a-f]{32})\b'''
+secretGroup = 2
+keywords = ["client_secret", "client_id", "spotify"]
+
+[[rules]]
+id = "api-key-file"
+description = "API key stored in a file"
+path = '''(^|/)api_key[^/]*\.txt$'''
+
+[allowlist]
+description = "binary assets and the secrets template"
+paths = [
+	'''\.(wav|mp3|ppn|task|png|jpg)$''',
+	'''config/secrets\.env\.example$''',
+]

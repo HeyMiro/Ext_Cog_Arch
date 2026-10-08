@@ -1,0 +1,7 @@
+# Keep the resolver from replacing the pinned stack (Python 3.8)
+numpy==1.24.4
+torch==2.4.1
+torchvision==0.19.1
+protobuf<4
+opencv-python==4.10.0.84
+opencv-contrib-python==4.10.0.84

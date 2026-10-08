@@ -1,0 +1,62 @@
+# Songs MiRo can dance to. Files live in assets/songs/.
+# bpm was measured with tools/estimate_bpm.py (Spotify's audio-analysis
+# endpoint is no longer available to new apps). genre selects the light
+# palette and the dance energy (see core/choreography/lights.py).
+
+songs:
+  - id: dance_the_night
+    file: assets/songs/dance_the_night.mp3
+    title: Dance the Night
+    artist: Dua Lipa
+    aliases: [dance the night away]
+    bpm: 110.0
+    genre: pop
+  - id: dancing_queen
+    file: assets/songs/dancing_queen.mp3
+    title: Dancing Queen
+    artist: ABBA
+    aliases: [abba]
+    bpm: 100.4
+    genre: disco
+  - id: higher_and_higher
+    file: assets/songs/higher_and_higher.mp3
+    title: (Your Love Keeps Lifting Me) Higher and Higher
+    artist: Jackie Wilson
+    aliases: [higher and higher, your love keeps lifting me higher]
+    bpm: 96.0
+    genre: soul
+  - id: in_the_moonlight
+    file: assets/songs/in_the_moonlight.mp3
+    title: Dancing in the Moonlight
+    artist: Toploader
+    aliases: [dancing in the moonlight, moonlight]
+    bpm: 119.1
+    genre: rock
+  - id: just_dance
+    file: assets/songs/just_dance.mp3
+    title: Just Dance
+    artist: Lady Gaga
+    aliases: [lady gaga]
+    bpm: 118.6
+    genre: pop
+  - id: make_you_sweat
+    file: assets/songs/make_you_sweat.mp3
+    title: Gonna Make You Sweat (Everybody Dance Now)
+    artist: C+C Music Factory
+    aliases: [gonna make you sweat, everybody dance now]
+    bpm: 113.0
+    genre: dance
+  - id: murder_dancefloor
+    file: assets/songs/murder_dancefloor.mp3
+    title: Murder on the Dancefloor
+    artist: Sophie Ellis-Bextor
+    aliases: [murder on the dance floor]
+    bpm: 117.3
+    genre: disco
+  - id: whitney_dance
+    file: assets/songs/whitney_dance.mp3
+    title: I Wanna Dance with Somebody
+    artist: Whitney Houston
+    aliases: [i wanna dance with somebody, dance with somebody, whitney]
+    bpm: 118.6
+    genre: pop
