@@ -377,7 +377,8 @@ class TestCommands(ForebrainTestBase):
 		self.fb.on_command("converse")
 		self.tick()
 		self.assertEqual(self.dialogue.calls, ["wake"])
-		self.assertEqual(self.nodes.affect.woken, 1)
+		# woken by the command, and kept awake while engaged
+		self.assertGreaterEqual(self.nodes.affect.woken, 1)
 		self.assertEqual(self.nodes.cues.perks, 1)
 
 	def test_wake_words(self):

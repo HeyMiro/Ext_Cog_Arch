@@ -83,7 +83,7 @@ tests/                     unit tests (no ROS needed)
 ## Install Docker and get the code
 
 1. Install Docker on your Ubuntu machine: https://docs.docker.com/engine/install/ubuntu/
-2. Optional: run Docker without sudo: https://docs.docker.com/engine/install/linux-postinstall/
+2. Recommended: run Docker without sudo (https://docs.docker.com/engine/install/linux-postinstall/). `run_docker.bash` also works under sudo; it then uses your own secrets file and sound server.
 3. Optional, if your machine has an NVIDIA GPU (YOLO runs faster on it): install the NVIDIA driver and the
    [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
    Without them everything still runs on the CPU.

@@ -35,6 +35,16 @@ set -e
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# under sudo, use the invoking user's home and sound server, not root's
+# (better: add yourself to the docker group, see the README)
+USER_HOME="$HOME"
+USER_RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+	USER_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+	USER_RUNTIME="/run/user/$(id -u "$SUDO_USER")"
+	echo "NOTE: running under sudo; using $SUDO_USER's secrets file and sound server"
+fi
+
 MODE=""
 ROBOT_IP=""
 HOST_IP="auto"
@@ -42,7 +52,7 @@ ROBOT_NAME="miro"
 GPU="auto"
 IMAGE="ghcr.io/heymiro/ext_cog_arch:latest"
 NAME="heymiro"
-SECRETS="${XDG_CONFIG_HOME:-$HOME/.config}/heymiro/secrets.env"
+SECRETS="$USER_HOME/.config/heymiro/secrets.env"
 AUDIO=1
 X11=1
 PRIVILEGED=0
@@ -71,11 +81,24 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
+# docker -v needs an absolute path (a relative one names a volume instead)
+if [ -e "$SECRETS" ]; then
+	SECRETS="$(cd "$(dirname "$SECRETS")" && pwd)/$(basename "$SECRETS")"
+fi
+
 # --- already running? open another terminal in it --------------------------------
 if [ -n "$(docker ps -q -f "name=^${NAME}$")" ]; then
-	running_mode="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$NAME" | sed -n 's/^MIRO_MODE=//p')"
+	running_env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$NAME")"
+	running_mode="$(sed -n 's/^MIRO_MODE=//p' <<< "$running_env")"
+	running_ip="$(sed -n 's/^MIRO_ROBOT_IP=//p' <<< "$running_env")"
+	running_host="$(sed -n 's/^MIRO_HOST_IP=//p' <<< "$running_env")"
 	if [ -n "$MODE" ] && [ "$MODE" != "$running_mode" ]; then
-		echo "container '$NAME' is already running in $running_mode mode; stop it first to switch to $MODE"
+		echo "container '$NAME' is already running in $running_mode mode; stop it first (docker stop $NAME) to switch to $MODE"
+		exit 1
+	fi
+	if { [ -n "$ROBOT_IP" ] && [ "$ROBOT_IP" != "$running_ip" ]; } || { [ "$HOST_IP" != "auto" ] && [ "$HOST_IP" != "$running_host" ]; }; then
+		echo "container '$NAME' is running with robot IP '${running_ip:-none}' / host IP '${running_host:-auto}';"
+		echo "stop it first (docker stop $NAME) to use the new addresses"
 		exit 1
 	fi
 	echo "attaching a new terminal to running container '$NAME' ($running_mode mode)"
@@ -128,10 +151,10 @@ fi
 
 # --- sound (host mic for the bridge, speaker for MiRo's voice) -------------------------------
 if [ "$AUDIO" = 1 ]; then
-	PULSE_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pulse"
+	PULSE_DIR="$USER_RUNTIME/pulse"
 	if [ -S "$PULSE_DIR/native" ]; then
 		ARGS+=(-v "$PULSE_DIR/native:/run/pulse/native" -e "PULSE_SERVER=unix:/run/pulse/native")
-		[ -f "$HOME/.config/pulse/cookie" ] && ARGS+=(-v "$HOME/.config/pulse/cookie:/root/.config/pulse/cookie:ro")
+		[ -f "$USER_HOME/.config/pulse/cookie" ] && ARGS+=(-v "$USER_HOME/.config/pulse/cookie:/root/.config/pulse/cookie:ro")
 	else
 		echo "NOTE: no PulseAudio socket at $PULSE_DIR/native - host audio may not work"
 	fi

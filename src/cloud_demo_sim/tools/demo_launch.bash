@@ -31,7 +31,7 @@ heymiro_env() {
 }
 
 heymiro_master_up() {
-	timeout 5 rostopic list >/dev/null 2>&1
+	timeout --foreground 5 rostopic list >/dev/null 2>&1
 }
 
 heymiro_start_bg() {
@@ -62,7 +62,7 @@ heymiro_cleanup() {
 heymiro_warn_foreign_demo() {
 	# a demo already running on the robot (MiRo app "demo mode") fights ours
 	local others
-	others="$(timeout 5 rosnode list 2>/dev/null | grep "/${MIRO_ROBOT_NAME}_client_demo" || true)"
+	others="$(timeout --foreground 5 rosnode list 2>/dev/null | grep "/${MIRO_ROBOT_NAME}_client_demo" || true)"
 	if [ -n "$others" ]; then
 		echo "WARNING: other demo clients are running:"
 		while read -r node; do echo "    $node"; done <<< "$others"

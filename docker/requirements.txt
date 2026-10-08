@@ -16,7 +16,7 @@ soundfile==0.12.1
 
 # scene awareness: YOLO objects + mediapipe hand gestures
 ultralytics>=8.3,<8.4
-mediapipe==0.10.11
+mediapipe==0.10.9          # 0.10.10+ pulls in jax/jaxlib, which has no Python 3.8 wheels
 opencv-python==4.10.0.84
 opencv-contrib-python==4.10.0.84
 

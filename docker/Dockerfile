@@ -93,16 +93,20 @@ RUN --mount=type=bind,source=docker/mdk,target=/tmp/mdk-local \
 	sed -i '/# MDK/d; /mdk\/setup.bash/d' /root/.bashrc; \
 	test -e /root/mdk/setup.bash
 
-# (the MDK setup script probes the network; tolerate its warnings)
+# build the MDK catkin workspace (miro2_msg); the setup script probes the
+# network and prints warnings in a container, which we tolerate
 RUN set -e; \
 	source /opt/ros/noetic/setup.bash; \
 	source /root/mdk/setup.bash || true; \
 	cd /root/mdk/catkin_ws; \
-	catkin clean -y; \
+	echo "catkin_ws/src:"; ls src; \
+	[ -d .catkin_tools ] || catkin init; \
 	catkin build --no-status; \
-	cd build/miro2_msg && make install; \
+	if [ -d build/miro2_msg ]; then (cd build/miro2_msg && make install); fi; \
 	source /root/mdk/catkin_ws/devel/setup.bash || true; \
-	python3 -c "import miro2, miro2_msg.msg; print('MDK python OK')"
+	source /root/mdk/setup.bash || true; \
+	python3 -c "import miro2, miro2_msg.msg; print('MDK python OK')" \
+		|| { echo "PYTHONPATH=$PYTHONPATH"; ls /root/mdk/share/python /root/mdk/catkin_ws/devel/lib/python3/dist-packages || true; exit 1; }
 
 # --- 4. Python packages ----------------------------------------------------------------
 COPY docker/requirements.txt docker/constraints.txt /opt/heymiro/

@@ -48,7 +48,8 @@ if ! heymiro_master_up; then
 fi
 heymiro_warn_foreign_demo
 
-trap heymiro_cleanup EXIT INT TERM
+trap heymiro_cleanup EXIT
+trap 'exit 130' INT TERM
 
 if [ "$EXT_MIC" = 1 ]; then
 	bridge=(python3 -u "$HERE/tools/host_audio_bridge.py")

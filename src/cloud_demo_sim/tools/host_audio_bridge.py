@@ -310,6 +310,9 @@ def main(argv=None):
 	ap.add_argument("--stream-total", type=int, default=8192)
 	ap.add_argument("--list-devices", action="store_true")
 	args = ap.parse_args(argv)
+	if args.stereo:
+		# a stereo pair needs both input channels
+		args.channels = 2
 
 	device = int(args.device) if args.device is not None and args.device.isdigit() else args.device
 	out_device = int(args.output_device) if args.output_device is not None and args.output_device.isdigit() else args.output_device

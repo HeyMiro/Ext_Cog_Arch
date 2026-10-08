@@ -162,8 +162,12 @@ def main(argv=None, heymiro=None, tts=None):
 	try:
 		make_takes(tts, text, os.path.join(clips_dir, slug), args.count, voice_id, args.play)
 	except (ValueError, RuntimeError) as e:
-		# raised locally (no voice id, empty audio, ffmpeg): safe to show
-		print("[make_clip] failed: " + e.__class__.__name__ + " " + str(e)[:120])
+		# requests errors (e.g. InvalidHeader) are ValueErrors whose message
+		# can contain the key: only show messages of our own local errors
+		if e.__class__.__module__.startswith("requests") or getattr(e, "request", None) is not None:
+			print("[make_clip] failed: " + describe_error(e))
+		else:
+			print("[make_clip] failed: " + e.__class__.__name__ + " " + str(e)[:120])
 		return 1
 	except Exception as e:
 		# HTTP / network errors: class and status only, never the message
