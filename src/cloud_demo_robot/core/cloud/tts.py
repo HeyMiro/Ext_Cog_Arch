@@ -51,11 +51,24 @@ def normalise_peak(pcm, level=PEAK_LEVEL):
 
 def is_mp3(content_type, data):
 
-	ctype = (content_type or "").lower()
+	ctype = (content_type or "").lower().strip()
 	if "mpeg" in ctype or "mp3" in ctype:
 		return True
-	# an ID3 tag or an MPEG frame sync, when the type is missing
-	return data[:3] == b"ID3" or (len(data) > 1 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0)
+	if ctype:
+		# the server said what it is (pcm, octet-stream, ...): trust it;
+		# raw s16le PCM can start with bytes that look like an MPEG sync
+		return False
+	# no content type: an ID3 tag, or a plausible MPEG frame header
+	# (sync, a defined version/layer, and a bitrate index that is not
+	# "free" or "bad")
+	if data[:3] == b"ID3":
+		return True
+	if len(data) < 3 or data[0] != 0xFF or (data[1] & 0xE0) != 0xE0:
+		return False
+	version = (data[1] >> 3) & 0x03
+	layer = (data[1] >> 1) & 0x03
+	bitrate = (data[2] >> 4) & 0x0F
+	return version != 1 and layer != 0 and bitrate not in (0, 15)
 
 
 

@@ -241,7 +241,8 @@ class DemoNodes:
 		# the forebrain ticks after affect (so it sees the current
 		# emotion) and before express/action (so its overrides and task
 		# requests are acted on in the same tick); voice ticks after
-		# action so speech started this tick is reflected in in_speaking
+		# action so speech started this tick is reflected in in_speaking,
+		# and hearing after voice so it mutes for it (self-hearing guard)
 		if self.client_type == "main":
 			self.lower.tick()
 			self.affect.tick()
@@ -251,6 +252,7 @@ class DemoNodes:
 			self.express.tick()
 			self.action.tick()
 			self.voice.tick()
+			self.hearing.tick()
 			self.loop.tick()
 
 	def shutdown(self):

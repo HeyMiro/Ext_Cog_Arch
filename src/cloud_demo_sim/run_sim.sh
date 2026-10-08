@@ -52,7 +52,8 @@ if [ "$MIRO_MODE" = "robot" ] && [ -n "$MIRO_ROBOT_IP" ]; then
 fi
 export ROS_MASTER_URI="${ROS_MASTER_URI:-http://localhost:11311}"
 
-trap heymiro_cleanup EXIT INT TERM
+trap heymiro_cleanup EXIT
+trap 'exit 130' INT TERM
 
 if [ "$GAZEBO" = 1 ]; then
 	if ! heymiro_master_up; then
@@ -69,7 +70,7 @@ if ! heymiro_master_up; then
 fi
 
 echo "waiting for the simulated MiRo (/$MIRO_ROBOT_NAME/sensors/package)..."
-if ! timeout 120 rostopic echo -n 1 "/$MIRO_ROBOT_NAME/sensors/package/flags" >/dev/null 2>&1; then
+if ! timeout --foreground 120 rostopic echo -n 1 "/$MIRO_ROBOT_NAME/sensors/package/flags" >/dev/null 2>&1; then
 	echo "no sensors/package after 120 s - is the simulator running (and not paused)?"
 	exit 1
 fi

@@ -633,6 +633,13 @@ class NodeForebrain(node.Node):
 
 	def _modulate(self):
 
+		# keep MiRo awake while it is talking, dancing or playing: low
+		# wakefulness would droop the head (client_demo scales the lift by
+		# it) and slow everything down mid-behaviour
+		affect = self._node("affect")
+		if affect is not None and self.engaged():
+			affect.wake()
+
 		hearing = self._node("hearing")
 		mask = self.compute_keyword_mask()
 		if hearing is not None and mask != self.keyword_mask:

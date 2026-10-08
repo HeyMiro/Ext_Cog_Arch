@@ -181,7 +181,10 @@ class NodeHearing(node.Node):
 
 	def muted(self):
 
-		return self._mute_forced or self._speaking or time.monotonic() < self._guard_until
+		# state.in_speaking is read directly as well, so a clip started by
+		# the dialogue this tick mutes the mics before hearing.tick() runs
+		speaking = self._speaking or bool(getattr(self.state, "in_speaking", 0.0))
+		return self._mute_forced or speaking or time.monotonic() < self._guard_until
 
 	def poll_events(self):
 

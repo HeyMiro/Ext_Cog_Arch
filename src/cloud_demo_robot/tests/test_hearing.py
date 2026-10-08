@@ -458,6 +458,17 @@ class TestNodeHearing(unittest.TestCase):
 			h.process_frame(f)
 		self.assertEqual([e for e in h.poll_events() if e[0] == "touch"], [])
 
+	def test_muted_while_speaking_even_before_tick(self):
+
+		# a clip started this tick must mute the mics before hearing.tick()
+		h, sys_ = self.make()
+		self.assertFalse(h.muted())
+		sys_.state.in_speaking = 1.0
+		self.assertTrue(h.muted())
+		sys_.state.in_speaking = 0.0
+		h.tick()
+		self.assertFalse(h.muted())
+
 	def test_input_queue_drops_oldest(self):
 
 		h, _ = self.make()

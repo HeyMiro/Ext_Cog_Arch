@@ -256,6 +256,11 @@ class NodeVoice(node.Node):
 					self._robot_tail_until = now + self._robot_buffered / float(audio_util.SPKR_RATE)
 			elif not self.mixer.active():
 				self._resampler.reset()
+		if self._silent and not self.mixer.active():
+			# idle: restart the silent clock when the next sound starts,
+			# so it does not "catch up" over the idle gap
+			self._silent_t = None
+			self._silent_frac = 0.0
 		elif self.mixer.active() and (self._last_feedback is None or now - self._last_feedback > 1.0):
 			# no sensors/stream feedback (no robot, or the bridge is not
 			# running): keep time silently so the demo does not hang

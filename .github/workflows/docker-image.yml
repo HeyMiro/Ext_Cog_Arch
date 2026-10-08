@@ -58,9 +58,9 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Cache the MDK tarball (download from Google Drive at most once)
+      - name: Restore the MDK tarball (download from Google Drive at most once)
         id: mdk-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.MDK_TGZ }}
           key: mdk-2-230105-v1
@@ -71,7 +71,13 @@ jobs:
           python3 -m pip install --quiet gdown==5.2.0
           python3 -m gdown "https://drive.google.com/uc?id=${MDK_GDRIVE_ID}" -O "$MDK_TGZ"
           sha256sum "$MDK_TGZ"
-          tar -tzf "$MDK_TGZ" | head -n 5
+
+      - name: Save the MDK tarball to the cache (even if the build fails later)
+        if: steps.mdk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.MDK_TGZ }}
+          key: mdk-2-230105-v1
 
       - uses: docker/setup-buildx-action@v3
 

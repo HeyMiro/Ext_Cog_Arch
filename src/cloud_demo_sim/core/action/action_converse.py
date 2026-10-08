@@ -114,7 +114,9 @@ class ActionConverse(forebrain_action.ForebrainAction):
 
 		# wanted but pre-empted (halt, avert, being picked up): keep
 		# talking for a while, but do not hold a conversation forever
-		if self.wanted() and self.interface.inhibition > 0:
+		# (being stroked hands the body to mull for a while: that is not a
+		# reason to end the conversation, so touch does not count)
+		if self.wanted() and self.interface.inhibition > 0 and not self.input.user_touch > 0:
 			now = self.now()
 			if self.t_preempted is None:
 				self.t_preempted = now
