@@ -109,11 +109,19 @@ RUN set -e; \
 		|| { echo "PYTHONPATH=$PYTHONPATH"; ls /root/mdk/share/python /root/mdk/catkin_ws/devel/lib/python3/dist-packages || true; exit 1; }
 
 # --- 4. Python packages ----------------------------------------------------------------
+# Installed into /usr/local with --ignore-installed: apt's Python packages
+# (psutil, numpy, Pillow, ... installed by distutils) cannot be uninstalled
+# by pip, so ours shadow them instead. torch 2.4.1 from PyPI is the CUDA
+# 12.1 build; another TORCH_VARIANT (e.g. cpu) is swapped in afterwards.
 COPY docker/requirements.txt docker/constraints.txt /opt/heymiro/
 RUN python3 -m pip install -U "pip<25.1" "setuptools<70" wheel && \
-	python3 -m pip install --index-url "https://download.pytorch.org/whl/${TORCH_VARIANT}" \
+	python3 -m pip install --ignore-installed \
+		-r /opt/heymiro/requirements.txt -c /opt/heymiro/constraints.txt \
 		torch==2.4.1 torchvision==0.19.1 && \
-	python3 -m pip install -r /opt/heymiro/requirements.txt -c /opt/heymiro/constraints.txt && \
+	if [ "${TORCH_VARIANT}" != "cu121" ]; then \
+		python3 -m pip install --force-reinstall --no-deps \
+			--index-url "https://download.pytorch.org/whl/${TORCH_VARIANT}" torch==2.4.1 torchvision==0.19.1; \
+	fi && \
 	python3 -m pip install --force-reinstall --no-deps opencv-contrib-python==4.10.0.84 && \
 	(python3 -m pip check || true) && \
 	python3 -m pip freeze > /opt/heymiro/pip-freeze.txt
