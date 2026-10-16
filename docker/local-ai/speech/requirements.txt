@@ -1,0 +1,15 @@
+# Hey MiRo local speech service (Python 3.12, CUDA 12 wheels).
+# torch's CUDA wheels bring cuBLAS/cuDNN 9, which ctranslate2 also uses.
+torch==2.5.1
+faster-whisper==1.1.1
+ctranslate2==4.6.0          # 4.5.x wheels need an executable stack (refused by newer kernels)
+kokoro==0.9.4
+misaki[en]==0.9.4
+transformers==4.46.3
+onnxruntime==1.20.1
+numpy==1.26.4
+scipy==1.14.1
+soundfile==0.12.1
+fastapi==0.115.6
+uvicorn==0.32.1
+python-multipart==0.0.20

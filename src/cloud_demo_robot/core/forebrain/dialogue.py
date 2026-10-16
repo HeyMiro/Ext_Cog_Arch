@@ -35,8 +35,17 @@
 #	whose token is no longer current (the user said "stop", a task took
 #	over, the conversation ended and a new one began) is ignored.
 #
+#	Streaming (local pipeline): the job may also report progress on a
+#	queue while it runs: ("header", LlmReply) as soon as the emotion and
+#	actions are known, then ("speech", pcm24k) for each synthesized
+#	sentence. MiRo starts speaking with the first sentence (RESPONDING)
+#	and appends the rest as they come; the Future's TurnResult (transcript,
+#	full reply, raw text for the memory) still ends the turn.
+#
 
-from cloud.llm import parse_llm_reply, context_message
+import queue
+
+from cloud.llm import parse_llm_reply, context_message, ReplyStream
 from cloud.worker import describe_error
 import audio_util
 
@@ -81,7 +90,7 @@ class TurnResult(object):
 
 	"""What one cloud turn produced (built on the worker thread)."""
 
-	def __init__(self, transcript="", reply=None, speech=None, raw="", tts_error=None):
+	def __init__(self, transcript="", reply=None, speech=None, raw="", tts_error=None, streamed=False):
 
 		self.transcript = transcript      # what the user said ("" = nothing)
 		self.reply = reply                # LlmReply or None
@@ -97,18 +106,30 @@ class TurnRunner(object):
 	One conversation turn, run on the CloudWorker:
 	pcm (16 kHz) -> wav -> speech-to-text -> chat -> parse -> text-to-speech.
 
-	clients is a cloud.llm.OpenAIClients, tts a cloud.tts.TextToSpeech (or
-	None: the reply is then printed and a clip played instead), memory a
-	cloud.llm.ChatMemory (read here, written on the tick when the result
-	is accepted, so a stale turn can never pollute it).
+	clients is a cloud.llm.OpenAIClients, tts a cloud.tts.TextToSpeech or
+	OpenAISpeech (or None: the reply is then printed and a clip played
+	instead), memory a cloud.llm.ChatMemory (read here, written on the
+	tick when the result is accepted, so a stale turn can never pollute it).
+
+	With stream (ai.local.stream, needs a TTS with synthesize_stream) and
+	a progress queue, the chat is streamed and parsed as it arrives
+	(ReplyStream) and each sentence is synthesized and reported at once;
+	see the module comment. Without a queue the turn runs as before.
 	"""
 
-	def __init__(self, clients, tts, memory, system_prompt, cfg):
+	def __init__(self, clients, tts, memory, system_prompt, cfg, examples=None,
+			response_format=None, extra_body=None, stream=False, stt_prompt=None, context_in_user=False):
 
 		self.clients = clients
 		self.tts = tts
 		self.memory = memory
 		self.system_prompt = system_prompt
+		self.examples = list(examples or [])
+		self.response_format = response_format
+		self.extra_body = extra_body
+		self.stream = bool(stream) and hasattr(tts, "synthesize_stream")
+		self.stt_prompt = stt_prompt
+		self.context_in_user = bool(context_in_user)
 		self.stt_model = cfg.get("stt.model", "whisper-1")
 		self.language = cfg.get("stt.language", None)
 		self.llm_model = cfg.get("llm.model", "gpt-4o")
@@ -117,22 +138,28 @@ class TurnRunner(object):
 		self.json_mode = bool(cfg.get("llm.json_mode", True))
 		self.impression_voice_id = cfg.get("tts.impression_voice_id", None)
 
-	def __call__(self, pcm16k, valence=None, arousal=None, now_str=None):
+	def __call__(self, pcm16k, valence=None, arousal=None, now_str=None, progress=None):
 
 		if self.clients is None:
 			raise RuntimeError("conversation is not configured (no OpenAI route)")
 
 		# speech to text
 		wav = audio_util.wav_bytes(audio_util.to_int16(pcm16k), audio_util.HEARING_RATE)
-		text = (self.clients.transcribe(wav, self.stt_model, self.language) or "").strip()
+		if self.stt_prompt:
+			text = self.clients.transcribe(wav, self.stt_model, self.language, prompt=self.stt_prompt)
+		else:
+			text = self.clients.transcribe(wav, self.stt_model, self.language)
+		text = (text or "").strip()
 		if text.lower() in NON_SPEECH:
 			return TurnResult(transcript="")
 
 		# chat (the context message is ephemeral: never stored)
 		context = context_message(valence, arousal, now_str)
-		messages = self.memory.messages(self.system_prompt, context, text)
-		raw = self.clients.chat(messages, self.llm_model, temperature=self.temperature,
-			max_tokens=self.max_tokens, json_mode=self.json_mode)
+		messages = self.memory.messages(self.system_prompt, context, text, self.examples, self.context_in_user)
+		if self.stream and progress is not None:
+			return self._streamed(text, messages, progress)
+
+		raw = self._chat(messages)
 		reply = parse_llm_reply(raw)
 
 		# a dance hands straight over to the dance intro (as in HRI'25),
@@ -148,6 +175,54 @@ class TurnRunner(object):
 				tts_error = describe_error(e)
 		return TurnResult(text, reply, speech, raw, tts_error)
 
+	def _chat(self, messages):
+
+		if self.response_format is not None and hasattr(self.clients, "chat_stream"):
+			# structured output (grammar-constrained on llama.cpp)
+			return "".join(self._chat_pieces(messages))
+		return self.clients.chat(messages, self.llm_model, temperature=self.temperature,
+			max_tokens=self.max_tokens, json_mode=self.json_mode)
+
+	def _chat_pieces(self, messages):
+
+		return self.clients.chat_stream(messages, self.llm_model, temperature=self.temperature,
+			max_tokens=self.max_tokens, response_format=self.response_format, extra_body=self.extra_body)
+
+	def _streamed(self, text, messages, progress):
+
+		parser = ReplyStream()
+		header = None
+		tts_error = None
+		speak = True
+
+		def say(sentence):
+			# synthesize one sentence and hand its chunks to the tick
+			impression = bool(header is not None and header.commands.get("impression"))
+			for pcm in self.tts.synthesize_stream(sentence, impression):
+				if len(pcm):
+					progress.put(("speech", pcm))
+
+		for piece in self._chat_pieces(messages):
+			for kind, value in parser.feed(piece):
+				if kind == "header":
+					header = value
+					progress.put(("header", value))
+					# a dance goes straight to its intro: nothing to say
+					speak = not value.commands.get("dance")
+				elif kind == "sentence" and speak and tts_error is None:
+					try:
+						say(value)
+					except Exception as e:
+						tts_error = describe_error(e)
+		for kind, value in parser.finish():
+			if kind == "sentence" and speak and tts_error is None and not parser.reply.commands.get("dance"):
+				try:
+					say(value)
+				except Exception as e:
+					tts_error = describe_error(e)
+		reply = parser.reply
+		return TurnResult(text, reply, None, parser.raw, tts_error, streamed=parser.emitted_any())
+
 
 
 class DialogueMachine(object):
@@ -162,7 +237,8 @@ class DialogueMachine(object):
 	  voice.say_pcm(pcm24k) -> duration s
 	  voice.stop(channel=None)
 	  voice.is_speaking()
-	  submit_turn(pcm16k) -> concurrent.futures.Future of TurnResult
+	  submit_turn(pcm16k, progress) -> concurrent.futures.Future of TurnResult
+	                              (progress: a queue.Queue the job may report on)
 
 	Feed it on_wake(), on_hearing(name, payload), on_stop(), face_done(),
 	suspend(task) and resume(); call tick() every control tick; drain
@@ -205,6 +281,9 @@ class DialogueMachine(object):
 		self.speech_dur = 0.0
 		self.task_after = None       # (name, params) to hand over after speaking
 		self.sleep_after = False
+		self.progress = None         # queue.Queue of the running job's progress
+		self.header = None           # streamed LlmReply header of the running job
+		self.streaming = False       # RESPONDING while the job still streams speech
 
 	# ---------------------------------------------------------------- queries
 
@@ -325,6 +404,8 @@ class DialogueMachine(object):
 			self._tick_thinking(now)
 
 		elif self.state == RESPONDING:
+			if self.streaming and not self._tick_streaming():
+				return
 			if self._speech_finished(age):
 				if self.task_after is not None:
 					name, params = self.task_after
@@ -370,6 +451,14 @@ class DialogueMachine(object):
 			return
 		token, future = self.job
 
+		# streamed speech: start answering with the first sentence (once
+		# the "hmm" is over), unless the reply hands over to a dance
+		if self.progress is not None and not speaking:
+			first = self._take_progress()
+			if first is not None:
+				self._start_streaming(first)
+				return
+
 		if not future.done():
 			if now > self.deadline:
 				self.log("[dialogue] the cloud took too long (> %.0f s)" % self.turn_timeout_s)
@@ -408,22 +497,11 @@ class DialogueMachine(object):
 			self._acknowledge_and_listen()
 			return
 		self._emit("reply", reply)
+		self._decide_after(reply)
 		if result.tts_error:
 			self.log("[dialogue] text-to-speech failed (" + result.tts_error + ")")
 
-		commands = reply.commands or {}
-		if commands.get("sleep"):
-			self.sleep_after = True
-
-		task = None
-		for command, name in TASK_COMMANDS:
-			if commands.get(command):
-				params = {"intro": False}
-				if name == "dance":
-					params["query"] = commands.get("song")
-				task = (name, params)
-				break
-
+		task = self.task_after
 		if task is not None and task[0] == "dance":
 			# straight into the dance intro clip, as in HRI'25
 			self.voice.stop("music")
@@ -431,8 +509,92 @@ class DialogueMachine(object):
 			self._enter(SUSPENDED)
 			return
 
-		self.task_after = task
 		self._enter_responding(result.speech, reply)
+
+	def _decide_after(self, reply):
+
+		# what happens after this reply: sleep, or a task to hand over to
+		commands = reply.commands or {}
+		if commands.get("sleep"):
+			self.sleep_after = True
+		self.task_after = None
+		for command, name in TASK_COMMANDS:
+			if commands.get(command):
+				params = {"intro": False}
+				if name == "dance":
+					params["query"] = commands.get("song")
+				self.task_after = (name, params)
+				break
+
+	# -------------------------------------------------------------- streaming
+
+	def _take_progress(self):
+
+		# drain header events; return the first speech chunk (or None)
+		while True:
+			try:
+				kind, value = self.progress.get_nowait()
+			except (queue.Empty, AttributeError):
+				return None
+			if kind == "header":
+				self.header = value
+			elif kind == "speech" and self.header is not None and not self.header.commands.get("dance"):
+				return value
+
+	def _start_streaming(self, first_pcm):
+
+		# answer now: the header is the reply so far (no text yet)
+		reply = self.header
+		self.reply = reply
+		self._emit("reply", reply)
+		self._decide_after(reply)
+		self.voice.stop("music")
+		self.speech_dur = self.voice.say_pcm(first_pcm)
+		self.streaming = True
+		self._enter(RESPONDING)
+
+	def _tick_streaming(self):
+
+		# while the job runs: append new speech; when it is done, store
+		# the exchange. True once there is nothing more to wait for.
+		while True:
+			try:
+				kind, value = self.progress.get_nowait()
+			except queue.Empty:
+				break
+			if kind == "speech":
+				self.speech_dur += self.voice.say_pcm(value, append=True)
+		if self.job is None:
+			self.streaming = False
+			return True
+		token, future = self.job
+		if not future.done():
+			if self.clock() > self.deadline:
+				self.log("[dialogue] the reply stream took too long")
+				self._drop_job()
+				self.streaming = False
+				return True
+			return False
+		if not self.progress.empty():
+			return False
+		self.job = None
+		self.streaming = False
+		if token != (self.episode, self.turn):
+			return True
+		try:
+			result = future.result()
+		except Exception as e:
+			self.log("[dialogue] turn failed while speaking: " + describe_error(e))
+			return True
+		if self.log_transcripts:
+			self.log("[dialogue] user: " + result.transcript)
+		if result.reply is not None:
+			self.reply = result.reply
+			self.log("[dialogue] MiRo said: " + result.reply.reply)
+		self._emit("remember", (result.transcript, result.raw))
+		if result.tts_error:
+			self.log("[dialogue] text-to-speech failed (" + result.tts_error + ")")
+		return True
 
 	# ------------------------------------------------------------ transitions
 
@@ -465,7 +627,10 @@ class DialogueMachine(object):
 		self.music_started = False
 		self.turn += 1
 		token = (self.episode, self.turn)
-		self.job = (token, self.submit_turn(pcm))
+		self.progress = queue.Queue()
+		self.header = None
+		self.streaming = False
+		self.job = (token, self.submit_turn(pcm, self.progress))
 		self.deadline = self.clock() + self.turn_timeout_s
 		self._enter(THINKING)
 
@@ -502,6 +667,9 @@ class DialogueMachine(object):
 		# the Future keeps running on the worker; its result is ignored
 		self.job = None
 		self.turn += 1
+		self.progress = None
+		self.header = None
+		self.streaming = False
 
 	def _speech_finished(self, age):
 

@@ -1,0 +1,81 @@
+# Hey MiRo local AI services: everything the cloud did, on this computer's
+# GPU. Start with docker/local-ai/up.bash (it checks the models first).
+#
+#   llm     llama.cpp server, Qwen3.5 (vision-language) GGUF
+#           http://127.0.0.1:8080/v1   OpenAI-compatible chat, json_schema, streaming
+#   speech  faster-whisper + Kokoro + smart-turn
+#           http://127.0.0.1:8090/v1   transcriptions, speech, turn
+#
+# Both listen on localhost only. Models come from the heymiro-models volume
+# (download_models.bash); nothing is downloaded at run time.
+
+name: heymiro-local-ai
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+
+services:
+  llm:
+    <<: *gpu
+    # pinned build of ghcr.io/ggml-org/llama.cpp:server-cuda (b11681)
+    image: ghcr.io/ggml-org/llama.cpp@sha256:53bec65a6120e8ab8cb76af725c3b05a7f098b5308c96e5d9f8dad98f1f1f639
+    restart: unless-stopped
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: ["heymiro-models:/models:ro"]
+    command:
+      - --model
+      - ${HEYMIRO_LLM_GGUF:-/models/unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q4_K_M.gguf}
+      - --mmproj
+      - ${HEYMIRO_LLM_MMPROJ:-/models/unsloth/Qwen3.5-4B-GGUF/mmproj-F16.gguf}
+      - --alias
+      - heymiro
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --n-gpu-layers
+      - "999"
+      - --ctx-size
+      - ${HEYMIRO_LLM_CTX:-16384}
+      - --parallel
+      - "2"
+      - --flash-attn
+      - "on"
+      - --jinja
+      # no "thinking": a pet robot answers straight away
+      - --reasoning-budget
+      - "0"
+      - --chat-template-kwargs
+      - '{"enable_thinking": false}'
+      # reuse the cached system prompt + examples across turns
+      - --cache-reuse
+      - "256"
+      - --no-webui
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
+
+  speech:
+    <<: *gpu
+    build: ./speech
+    image: heymiro-speech:local
+    restart: unless-stopped
+    ports: ["127.0.0.1:8090:8090"]
+    volumes: ["heymiro-models:/models:ro"]
+    environment:
+      HF_HUB_OFFLINE: "1"
+      TTS_VOICE: ${HEYMIRO_TTS_VOICE:-af_heart}
+      STT_COMPUTE: ${HEYMIRO_STT_COMPUTE:-int8_float16}
+
+volumes:
+  heymiro-models:
+    external: true

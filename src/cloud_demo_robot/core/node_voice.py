@@ -80,6 +80,22 @@ class Mixer(object):
 			c.loop = bool(loop) and pcm.size > 0
 		return pcm.size / float(RATE)
 
+	def append(self, name, pcm):
+
+		# queue pcm after what the channel is still playing (streamed
+		# speech); starts it if the channel is idle. Returns its duration.
+		pcm = audio_util.to_int16(np.asarray(pcm).reshape(-1))
+		with self._lock:
+			c = self.ch[name]
+			if c.pcm is None or c.loop or c.pos >= c.pcm.size:
+				c.pcm = pcm if pcm.size else None
+				c.pos = 0
+				c.loop = False
+			elif pcm.size:
+				c.pcm = np.concatenate((c.pcm[c.pos:], pcm))
+				c.pos = 0
+		return pcm.size / float(RATE)
+
 	def stop(self, name=None):
 
 		with self._lock:
@@ -282,8 +298,10 @@ class NodeVoice(node.Node):
 			return 0.0
 		return self.mixer.play(channel, pcm)
 
-	def say_pcm(self, pcm24k):
+	def say_pcm(self, pcm24k, append=False):
 
+		if append:
+			return self.mixer.append("speech", pcm24k)
 		return self.mixer.play("speech", pcm24k)
 
 	def play_music(self, pcm24k, loop=False):

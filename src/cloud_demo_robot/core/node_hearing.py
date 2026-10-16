@@ -17,6 +17,11 @@
 #	self_hearing_guard_s afterwards the mics are ignored, so MiRo does not
 #	wake itself up or record its own voice (there is no echo cancellation).
 #
+#	Local pipeline (ai.provider: local): Silero VAD instead of Cobra, wake
+#	words recognised by the local speech-to-text (AsrKeywordSpotter), and
+#	the end of a turn decided by smart-turn (segmenter turn_check) instead
+#	of a fixed 3 s of silence.
+#
 #	This replaces HRI'25 node_detect_word (three Porcupine instances, an
 #	unfiltered np.interp decimation, an int16-overflowing channel sum) and
 #	the recording logic inside action_llm.audio_cb.
@@ -30,7 +35,7 @@ import numpy as np
 
 import node
 import audio_util
-from forebrain.wakeword import KeywordSpotter, make_vad
+from forebrain.wakeword import KeywordSpotter, AsrKeywordSpotter, WAKE_PROMPT, make_vad
 from forebrain.segmenter import UtteranceSegmenter
 from forebrain.touch_noise import TouchNoiseDetector
 
@@ -59,18 +64,34 @@ class NodeHearing(node.Node):
 		self.gain = float(cfg.get("gain", 1.0))
 		self.guard_s = float(cfg.get("self_hearing_guard_s", 0.3))
 
-		# wake words (injected for tests, else Porcupine if enabled and possible)
+		# wake words (injected for tests, else Porcupine or local ASR if enabled)
 		self.spotter = spotter
 		if self.spotter is None and features.get("wake_word", False):
-			self.spotter = self._make_spotter(heymiro, cfg)
+			if features.get("wake_word_backend") == "asr":
+				self.spotter = self._make_asr_spotter(heymiro, cfg)
+			else:
+				self.spotter = self._make_spotter(heymiro, cfg)
 		self.keyword_ids = list(self.spotter.ids) if self.spotter is not None else []
 
 		# voice activity
 		self.vad = vad
 		if self.vad is None:
-			kind = "cobra" if features.get("vad_cobra", False) else "energy"
+			kind = features.get("vad") or ("cobra" if features.get("vad_cobra", False) else "energy")
 			self.vad = make_vad(kind, heymiro.picovoice_key(), cfg.get("energy_threshold_dbfs", -38.0))
 		self.vad_kind = getattr(self.vad, "kind", "custom")
+
+		# end of turn: smart-turn on the local speech service
+		turn_check = None
+		end_silence_s = cfg.get("end_silence_s", 3.0)
+		if features.get("end_of_turn", False):
+			try:
+				from cloud.tts import TurnDetector
+				turn_check = TurnDetector(heymiro.route("turn"),
+					threshold=heymiro.cfg.get("ai.local.turn_threshold", 0.5))
+				end_silence_s = heymiro.cfg.get("ai.local.end_silence_s", 1.2)
+			except Exception as e:
+				print("[hearing] smart-turn unavailable (" + e.__class__.__name__ + "); fixed end of turn")
+		self.turn_check = turn_check
 
 		# utterances
 		self.segmenter = UtteranceSegmenter(
@@ -78,10 +99,12 @@ class NodeHearing(node.Node):
 			frame=audio_util.HEARING_FRAME,
 			vad_threshold=cfg.get("vad_threshold", 0.6),
 			onset_frames=cfg.get("onset_frames", 3),
-			end_silence_s=cfg.get("end_silence_s", 3.0),
+			end_silence_s=end_silence_s,
 			no_speech_timeout_s=cfg.get("no_speech_timeout_s", 3.0),
 			max_utterance_s=cfg.get("max_utterance_s", 20.0),
-			preroll_s=cfg.get("preroll_s", 0.5))
+			preroll_s=cfg.get("preroll_s", 0.5),
+			turn_check=turn_check,
+			turn_min_silence_s=heymiro.cfg.get("ai.local.turn_min_silence_s", 0.3))
 
 		# ear / tail scratching (only valid on MiRo's own mics)
 		self.touch = None
@@ -121,7 +144,28 @@ class NodeHearing(node.Node):
 			self._thread.start()
 
 		print("[hearing] wake words: " + (", ".join(self.keyword_ids) if self.keyword_ids else "none") +
-			"; VAD: " + self.vad_kind + "; touch: " + ("on" if self.touch else "off"))
+			(" (local ASR)" if isinstance(self.spotter, AsrKeywordSpotter) else "") +
+			"; VAD: " + self.vad_kind + "; end of turn: " +
+			("smart-turn" if turn_check is not None else "%.1f s silence" % float(end_silence_s)) +
+			"; touch: " + ("on" if self.touch else "off"))
+
+	def _make_asr_spotter(self, heymiro, cfg):
+
+		# wake phrases recognised by the local speech-to-text service
+		try:
+			from cloud.llm import OpenAIClients
+			clients = OpenAIClients(heymiro.route("stt"), None)
+			model = heymiro.cfg.get("stt.model", "whisper-1")
+			language = heymiro.cfg.get("stt.language", None)
+
+			def transcribe(wav):
+				return clients.transcribe_verbose(wav, model, language, prompt=WAKE_PROMPT)
+
+			ids = [w.get("id") for w in (cfg.get("wake_words") or [])]
+			return AsrKeywordSpotter(ids, transcribe, threshold=cfg.get("vad_threshold", 0.6))
+		except Exception as e:
+			print("[hearing] local wake words disabled: " + str(e))
+			return None
 
 	def _make_spotter(self, heymiro, cfg):
 
@@ -166,6 +210,9 @@ class NodeHearing(node.Node):
 
 		# reference swap, so the worker sees either the old or the new set
 		self._mask = None if ids is None else frozenset(ids)
+		if isinstance(self.spotter, AsrKeywordSpotter):
+			# nothing to listen for = no transcriptions at all
+			self.spotter.mask = self._mask
 
 	def arm_utterance(self):
 
@@ -281,18 +328,25 @@ class NodeHearing(node.Node):
 					self.segmenter.clear_preroll()
 					if self.touch is not None:
 						self.touch.reset()
+					if hasattr(self.spotter, "reset"):
+						self.spotter.reset()
 				self._was_muted = True
 				continue
 			self._was_muted = False
 
+			prob = float(self.vad.process(f))
+			self.last_prob = prob
+
 			if self.spotter is not None:
 				mask = self._mask
-				for kid in self.spotter.process(f):
+				if getattr(self.spotter, "needs_prob", False):
+					found = self.spotter.process(f, prob)
+				else:
+					found = self.spotter.process(f)
+				for kid in found:
 					if mask is None or kid in mask:
 						self._post("wake", kid)
 
-			prob = float(self.vad.process(f))
-			self.last_prob = prob
 			event = self.segmenter.feed(f, prob)
 			if event is not None:
 				self._post(event[0], event[1])

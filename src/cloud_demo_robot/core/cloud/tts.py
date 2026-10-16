@@ -131,3 +131,115 @@ class TextToSpeech(object):
 			# raw little-endian s16 (drop a stray odd byte)
 			pcm = np.frombuffer(data[:len(data) // 2 * 2], dtype="<i2")
 		return normalise_peak(pcm)
+
+
+
+class OpenAISpeech(object):
+
+	"""
+	Text-to-speech from an OpenAI-style /v1/audio/speech endpoint (the
+	local speech service: Kokoro). Same synthesize() as TextToSpeech,
+	plus synthesize_stream(), which yields int16 24 kHz chunks as the
+	server produces them (one per sentence), so playback can start
+	before the whole reply is synthesized.
+
+	cfg keys (ai.local): voice, impression_voice, pitch, impression_pitch,
+	speed. The pitch factor makes MiRo sound small (HRI'25 chose a
+	higher-pitched voice for the same reason).
+	"""
+
+	def __init__(self, route, cfg=None, session=None):
+
+		import requests
+		self.route = route
+		self.session = session or requests.Session()
+		self.voice = _cfg_get(cfg, "voice", "af_heart")
+		self.impression_voice = _cfg_get(cfg, "impression_voice", "af_sky")
+		self.pitch = float(_cfg_get(cfg, "pitch", 1.15))
+		self.impression_pitch = float(_cfg_get(cfg, "impression_pitch", 1.45))
+		self.speed = float(_cfg_get(cfg, "speed", 1.0))
+		self.timeout = (3.0, float(getattr(route, "timeout_s", 20.0) or 20.0))
+
+	def request(self, text, impression=False):
+
+		# (url, headers, json) of the REST call (tests check it offline)
+		url = self.route.base_url + "/audio/speech"
+		headers = {"Content-Type": "application/json"}
+		if self.route.api_key:
+			headers["Authorization"] = "Bearer " + self.route.api_key
+		body = {
+			"model": "kokoro",
+			"input": text,
+			"voice": self.impression_voice if impression else self.voice,
+			"response_format": "pcm",
+			"speed": self.speed,
+			"pitch": self.impression_pitch if impression else self.pitch,
+			"stream": True,
+		}
+		return url, headers, body
+
+	def synthesize_stream(self, text, impression=False):
+
+		text = (text or "").strip()
+		if not text:
+			return
+		url, headers, body = self.request(text, impression)
+		r = self.session.post(url, headers=headers, json=body, timeout=self.timeout, stream=True)
+		try:
+			if r.status_code != 200:
+				raise HttpError("tts", r.status_code)
+			rest = b""
+			for data in r.iter_content(chunk_size=None):
+				if not data:
+					continue
+				data = rest + data
+				n = len(data) // 2 * 2
+				rest = data[n:]
+				if n:
+					yield normalise_peak(np.frombuffer(data[:n], dtype="<i2"))
+		finally:
+			r.close()
+
+	def synthesize(self, text, voice_id=None, impression=None):
+
+		# voice_id is the ElevenLabs-style argument: any value = impression
+		impression = bool(voice_id) if impression is None else impression
+		chunks = list(self.synthesize_stream(text, impression))
+		if not chunks:
+			return np.zeros(0, dtype=np.int16)
+		return normalise_peak(np.concatenate(chunks))
+
+
+
+class TurnDetector(object):
+
+	"""
+	Asks the local speech service (/v1/turn, smart-turn v3) whether the
+	speaker has finished: __call__(pcm16k) -> True / False, or None when
+	the service does not answer in time (the segmenter then keeps
+	waiting for its fixed silence).
+	"""
+
+	def __init__(self, route, threshold=0.5, timeout_s=0.5, session=None):
+
+		import requests
+		self.url = route.base_url + "/turn"
+		self.threshold = float(threshold)
+		self.timeout = (0.5, float(timeout_s))
+		self.session = session or requests.Session()
+		self.last_prob = None
+		self.failures = 0
+
+	def __call__(self, pcm16k):
+
+		pcm = np.asarray(pcm16k, dtype=np.int16)[-8 * 16000:]
+		try:
+			r = self.session.post(self.url, data=pcm.astype("<i2").tobytes(), timeout=self.timeout,
+				headers={"Content-Type": "application/octet-stream"})
+			if r.status_code != 200:
+				raise HttpError("turn", r.status_code)
+			self.last_prob = float(r.json().get("probability"))
+		except Exception:
+			self.failures += 1
+			return None
+		return self.last_prob >= self.threshold

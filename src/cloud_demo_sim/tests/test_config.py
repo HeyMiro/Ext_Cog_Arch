@@ -76,7 +76,12 @@ class ConfigTestCase(unittest.TestCase):
 
 	def load(self, environ=None):
 
-		return HeyMiroConfig(self.root, dict(environ or {}))
+		# these tests are about the cloud routes and keys (the real
+		# heymiro.yaml defaults to ai.provider: local; see TestLocalProvider)
+		environ = dict(environ or {})
+		if "ai.provider" not in environ.get("HEYMIRO_SET", ""):
+			environ["HEYMIRO_SET"] = "ai.provider=cloud" + (";" + environ["HEYMIRO_SET"] if environ.get("HEYMIRO_SET") else "")
+		return HeyMiroConfig(self.root, environ)
 
 
 

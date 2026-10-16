@@ -16,6 +16,13 @@
 #
 #	After "utterance" or "no_speech" the segmenter disarms itself.
 #
+#	End of turn: a fixed end_silence_s (HRI'25: ~3 s), or, with a
+#	turn_check, sooner: from turn_min_silence_s of silence on, at every
+#	further turn_step_s of silence, turn_check(pcm16k_so_far) is asked
+#	whether the speaker has finished (smart-turn looks at the intonation
+#	and the words' rhythm); True ends the utterance at once. False or
+#	None (no answer) keeps waiting, up to end_silence_s at most.
+#
 
 import collections
 
@@ -26,7 +33,8 @@ import numpy as np
 class UtteranceSegmenter(object):
 
 	def __init__(self, rate=16000, frame=512, vad_threshold=0.6, onset_frames=3,
-			end_silence_s=3.0, no_speech_timeout_s=3.0, max_utterance_s=20.0, preroll_s=0.5):
+			end_silence_s=3.0, no_speech_timeout_s=3.0, max_utterance_s=20.0, preroll_s=0.5,
+			turn_check=None, turn_min_silence_s=0.3, turn_step_s=0.3):
 
 		self.rate = int(rate)
 		self.frame = int(frame)
@@ -35,6 +43,10 @@ class UtteranceSegmenter(object):
 		self.end_silence = int(round(end_silence_s * self.rate))
 		self.no_speech_timeout = int(round(no_speech_timeout_s * self.rate))
 		self.max_utterance = int(round(max_utterance_s * self.rate))
+		self.turn_check = turn_check
+		self.turn_min_silence = int(round(turn_min_silence_s * self.rate))
+		self.turn_step = max(self.frame, int(round(turn_step_s * self.rate)))
+		self.turn_checks = 0
 
 		# trailing silence kept on the recording (the rest is not worth uploading)
 		self.keep_tail = int(round(0.5 * self.rate))
@@ -58,6 +70,7 @@ class UtteranceSegmenter(object):
 		self._length = 0       # samples captured
 		self._chunks = []
 		self._in_speech = False
+		self._next_check = None   # silence (samples) at which to ask turn_check
 
 	def arm(self):
 
@@ -113,6 +126,7 @@ class UtteranceSegmenter(object):
 				event = ("voiced", None)
 			if self._in_speech:
 				self._silence = 0
+				self._next_check = None
 			else:
 				self._silence += n
 		else:
@@ -122,6 +136,18 @@ class UtteranceSegmenter(object):
 
 		if self._silence >= self.end_silence or self._length >= self.max_utterance:
 			return ("utterance", self._finish())
+		if self.turn_check is not None and self._silence >= self.turn_min_silence:
+			if self._next_check is None:
+				self._next_check = self._silence
+			if self._silence >= self._next_check:
+				self._next_check = self._silence + self.turn_step
+				self.turn_checks += 1
+				try:
+					done = self.turn_check(np.concatenate(self._chunks))
+				except Exception:
+					done = None
+				if done:
+					return ("utterance", self._finish())
 		return event
 
 	def _finish(self):

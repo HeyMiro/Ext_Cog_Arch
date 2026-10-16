@@ -20,6 +20,42 @@ mdk:
   # does not hum over the speech; x = special (AprilTag) responses off
   demo_flags: "vx"
 
+ai:
+  # local = everything on this computer's GPU (docker/local-ai, no keys,
+  #         no internet); cloud = the HRI'25 services (OpenAI, ElevenLabs,
+  #         Picovoice; keys in ~/.config/heymiro/secrets.env)
+  provider: local
+  local:
+    llm_url: http://127.0.0.1:8080/v1      # docker/local-ai llm (llama.cpp)
+    speech_url: http://127.0.0.1:8090/v1   # docker/local-ai speech
+    timeout_s: 15
+    stream: true                # speak the first sentence while the rest is generated
+    structured_output: true     # JSON-schema-constrained replies (always valid)
+    top_k: 20                   # Qwen's non-thinking sampling
+    top_p: 0.8
+    wake_word: asr              # asr (local speech-to-text) | porcupine (needs a key)
+    vad: silero                 # silero | energy | cobra (needs a key)
+    end_of_turn: smart_turn     # smart_turn | silence (hearing.end_silence_s)
+    turn_threshold: 0.5         # smart-turn probability that counts as "finished"
+    turn_min_silence_s: 0.3     # first ask smart-turn after this much silence
+    end_silence_s: 1.2          # ... and stop waiting after this much at most
+    stt_prompt: "MiRo"          # spelling hint for the speech-to-text
+    voice: af_heart             # Kokoro voice for MiRo
+    pitch: 1.15                 # > 1 = higher, smaller-sounding (HRI'25 picked a high voice)
+    speed: 1.05
+    impression_voice: af_sky    # the Mickey Mouse impression
+    impression_pitch: 1.45
+    settings:                   # replace these cloud settings when local
+      llm:
+        model: heymiro          # the llama.cpp alias (Qwen3.5, see docker/local-ai)
+        temperature: 0.7
+        max_tokens: 200
+        timeout_s: 15
+        object_comment_model: heymiro
+      stt:
+        model: whisper-large-v3-turbo
+        timeout_s: 10
+
 features:
   conversation: true            # "Hey MiRo" -> Whisper -> GPT -> ElevenLabs
   wake_word: true               # Porcupine wake words (needs PICOVOICE_ACCESS_KEY)
