@@ -584,7 +584,8 @@ class DemoSystem(object):
 
 		# platform: physical robot or Gazebo simulator?
 		if self.state.is_simulator is None:
-			self.state.is_simulator = (msg.flags & miro.constants.PLATFORM_U_FLAG_SIMULATOR) != 0
+			# sensors/package.flags is a std_msgs/UInt32 message, not an int
+			self.state.is_simulator = (msg.flags.data & miro.constants.PLATFORM_U_FLAG_SIMULATOR) != 0
 			print ("platform:", "simulator" if self.state.is_simulator else "robot")
 			expected = self.pars.forebrain.cfg.get("platform", "robot")
 			if self.state.is_simulator != (expected == "sim"):

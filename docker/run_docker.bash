@@ -102,7 +102,10 @@ if [ -n "$(docker ps -q -f "name=^${NAME}$")" ]; then
 		exit 1
 	fi
 	echo "attaching a new terminal to running container '$NAME' ($running_mode mode)"
-	exec docker exec -it "$NAME" "${CMD[@]}"
+	if [ -t 0 ]; then
+		exec docker exec -it "$NAME" "${CMD[@]}"
+	fi
+	exec docker exec -i "$NAME" "${CMD[@]}"
 fi
 
 if [ -z "$MODE" ]; then
@@ -110,7 +113,9 @@ if [ -z "$MODE" ]; then
 	exit 2
 fi
 
-ARGS=(run -it --rm --name "$NAME" --net=host --ipc=host)
+# a TTY only when there is one (scripts and CI run without)
+ARGS=(run -i --rm --name "$NAME" --net=host --ipc=host)
+[ -t 0 ] && ARGS+=(-t)
 ARGS+=(-e "MIRO_MODE=$MODE" -e "MIRO_ROBOT_NAME=$ROBOT_NAME" -e "MIRO_HOST_IP=$HOST_IP")
 [ "$MODE" = "robot" ] && ARGS+=(-e "MIRO_ROBOT_IP=$ROBOT_IP")
 
