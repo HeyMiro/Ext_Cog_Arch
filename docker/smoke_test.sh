@@ -23,6 +23,10 @@ v = metadata.version("pvporcupine")
 assert v.startswith("3.0."), "pvporcupine must be 3.0.x to load *_v3_0_0.ppn, got " + v
 import numpy, torch, cv2
 print("  numpy", numpy.__version__, "| torch", torch.__version__, "| cv2", cv2.__version__, "| pvporcupine", v)
+import importlib.util, os
+spec = importlib.util.find_spec("silero_vad")
+assert spec and os.path.isfile(os.path.join(list(spec.submodule_search_locations)[0], "data", "silero_vad.jit")), "silero-vad model missing"
+print("  silero-vad model OK")
 try:
 	import sounddevice
 	print("  sounddevice", sounddevice.__version__)

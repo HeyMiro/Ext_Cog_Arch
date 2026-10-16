@@ -331,7 +331,9 @@ class AsrKeywordSpotter(object):
 	segments (VAD probability >= threshold); a segment that ends (short
 	pause) or reaches max_segment_s is transcribed on a background thread
 	by transcribe(wav_bytes) -> (text, no_speech_prob), and the keyword
-	ids found in the text are returned by a later process() call.
+	ids found in the text are passed to on_found(ids) as soon as they are
+	known (from the background thread), or, without on_found, returned by
+	a later process() call.
 
 	Only one transcription runs at a time and at most one waits; anything
 	more is dropped (a wake phrase is short, and old audio is stale).
@@ -340,7 +342,7 @@ class AsrKeywordSpotter(object):
 	needs_prob = True
 
 	def __init__(self, ids, transcribe, threshold=0.5, onset_frames=2, end_silence_s=0.35,
-			max_segment_s=2.5, preroll_s=0.3, max_no_speech=0.6, log=print):
+			max_segment_s=2.5, preroll_s=0.3, max_no_speech=0.6, log=print, on_found=None):
 
 		self.ids = [i for i in ids if i in WAKE_LEADS]
 		if not self.ids:
@@ -354,6 +356,7 @@ class AsrKeywordSpotter(object):
 		self.max_frames = int(round(max_segment_s * rate / frame))
 		self.max_no_speech = float(max_no_speech)
 		self.log = log
+		self.on_found = on_found
 		self._pre = collections.deque(maxlen=max(1, int(round(preroll_s * rate / frame))))
 		self._seg = None
 		self._run = 0
@@ -436,8 +439,11 @@ class AsrKeywordSpotter(object):
 			if found:
 				self.log("[wakeword] heard %r -> %s (%.0f ms)" % (text, ",".join(found),
 					(time.monotonic() - t0) * 1000))
-				with self._lock:
-					self._found.extend(found)
+				if self.on_found is not None:
+					self.on_found(found)
+				else:
+					with self._lock:
+						self._found.extend(found)
 
 	def delete(self):
 
