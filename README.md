@@ -11,6 +11,17 @@ components:
 
 Every behaviour competes through MiRo's basal-ganglia action selection and modulates its affect.
 
+**Two ways to run the AI** (`ai.provider` in `config/heymiro.yaml`):
+
+| Provider | Wake word, VAD | Speech-to-text | LLM | Voice | Needs |
+|---|---|---|---|---|---|
+| `local` (default) | local Whisper, Silero, smart-turn | Whisper large-v3-turbo | Qwen3.5 (llama.cpp) | Kokoro | an NVIDIA GPU; no keys, works offline |
+| `cloud` (HRI '25) | Picovoice Porcupine + Cobra | OpenAI Whisper | GPT-4o | ElevenLabs | API keys |
+
+The local pipeline streams the reply, so MiRo starts speaking while the rest is still being generated. See
+[docs/local_ai.md](docs/local_ai.md) for the design, the models and measured latency. A comparison with the original
+HRI '25 code is in [docs/hri25_parity.md](docs/hri25_parity.md).
+
 There are two versions of the demo:
 
 | Folder | Runs against | Notes |
@@ -64,6 +75,7 @@ docker/                    Dockerfile + run/build scripts for the environment im
 docs/                      architecture, configuration, simulation, security
 src/cloud_demo_robot/      the demo for the physical robot   (bind-mounted into the container)
 src/cloud_demo_sim/        the demo for the Gazebo simulator (bind-mounted into the container)
+docker/local-ai/            local AI services: llama.cpp LLM + speech (Whisper, Kokoro, smart-turn)
 tools/check_copies.py      keeps the two project copies in sync
 .github/workflows/         image build (GHCR) and CI (tests, secret scan)
 ```
@@ -76,7 +88,8 @@ core/                      MDK-style demo code: client_demo.py, node_*.py, actio
                            plus forebrain/ (hearing, dialogue), cloud/ (P4 clients) and choreography/ (dancing)
 config/                    heymiro.yaml (settings), persona.md (LLM persona), clips.yaml, songs.yaml
 assets/                    voice clips, songs, wake words, gesture model
-tools/                     host_audio_bridge.py, mic_check.py, make_clip.py, estimate_bpm.py
+tools/                     host_audio_bridge.py, mic_check.py, make_clip.py, estimate_bpm.py,
+                           fake_user.py (synthetic user), eval_dialogue.py (LLM evaluation)
 tests/                     unit tests (no ROS needed)
 ```
 
@@ -105,6 +118,16 @@ tests/                     unit tests (no ROS needed)
    If the package is private, log in first with a GitHub token that has `read:packages`:
    `echo <token> | docker login ghcr.io -u <github-user> --password-stdin`.
    Or build it yourself with `docker/build_image.bash`; see [docs/docker.md](docs/docker.md).
+
+## Local AI services (default provider)
+
+```bash
+sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker   # once
+docker/local-ai/download_models.bash          # once, ~5 GB (pinned, ungated Hugging Face models)
+docker/run_docker.bash --sim --local-ai       # starts the services, then the container
+```
+
+Details: [docs/local_ai.md](docs/local_ai.md). The secrets below are only needed for `ai.provider: cloud`.
 
 ## Secrets and API routes
 
