@@ -95,6 +95,11 @@ class CloudServices(object):
 		self.songs = None       # cloud.music.SongLibrary
 		self.spotify = None     # cloud.music.SpotifyClient
 		self.persona = ""       # system prompt for the conversation
+		self.examples = []      # few-shot messages (cloud.llm.few_shot_messages)
+		self.song_list = None   # dance song values (cloud.tools.song_choices)
+		self.response_format = None   # structured output (local: json_schema)
+		self.extra_body = None  # server extras (local: llama.cpp sampling, no thinking)
+		self.stream = False     # stream the reply into the TTS (local)
 
 
 
@@ -106,33 +111,60 @@ def make_cloud_services(heymiro):
 	cloud = CloudServices()
 	cfg = heymiro.cfg
 	features = heymiro.features
+	local = getattr(heymiro, "local", False)
 
-	try:
-		from cloud.llm import OpenAIClients, build_system_prompt
-		persona = ""
-		try:
-			persona = heymiro.persona()
-		except (IOError, OSError):
-			print("[forebrain] WARN persona file not found; using a plain persona")
-		cloud.persona = build_system_prompt(persona, cfg.get("llm.event_name", ""))
-		if features.get("conversation", False):
-			cloud.clients = OpenAIClients(heymiro.route("stt"), heymiro.route("llm"))
-	except Exception as e:
-		print("[forebrain] conversation unavailable (" + describe_error(e) + ")")
-
-	if features.get("tts", False):
-		try:
-			from cloud.tts import TextToSpeech
-			cloud.tts = TextToSpeech(heymiro.route("tts"), cfg.get("tts"))
-		except Exception as e:
-			print("[forebrain] text-to-speech unavailable (" + describe_error(e) + ")")
-
+	# songs first: the prompt and the reply schema list them
 	if features.get("dance", False):
 		try:
 			from cloud.music import SongLibrary
 			cloud.songs = SongLibrary(heymiro)
 		except Exception as e:
 			print("[forebrain] song library unavailable (" + describe_error(e) + ")")
+	try:
+		from cloud.tools import song_choices
+		cloud.song_list = song_choices(cloud.songs.songs if cloud.songs is not None else [])
+	except Exception:
+		cloud.song_list = None
+
+	try:
+		from cloud.llm import OpenAIClients, build_system_prompt, few_shot_messages
+		persona = ""
+		try:
+			persona = heymiro.persona()
+		except (IOError, OSError):
+			print("[forebrain] WARN persona file not found; using a plain persona")
+		cloud.persona = build_system_prompt(persona, cfg.get("llm.event_name", ""), cloud.song_list)
+		cloud.examples = few_shot_messages(cloud.song_list)
+		if features.get("conversation", False):
+			cloud.clients = OpenAIClients(heymiro.route("stt"), heymiro.route("llm"))
+	except Exception as e:
+		print("[forebrain] conversation unavailable (" + describe_error(e) + ")")
+
+	if local:
+		from cloud.tools import response_format
+		if cfg.get("ai.local.structured_output", True):
+			cloud.response_format = response_format(cloud.song_list)
+		cloud.extra_body = {
+			# llama.cpp: no "thinking", reuse the cached prompt, Qwen's
+			# recommended non-thinking sampling
+			"chat_template_kwargs": {"enable_thinking": False},
+			"cache_prompt": True,
+			"top_k": int(cfg.get("ai.local.top_k", 20)),
+			"top_p": float(cfg.get("ai.local.top_p", 0.8)),
+		}
+		cloud.stream = bool(cfg.get("ai.local.stream", True))
+		check_local_services(heymiro)
+
+	if features.get("tts", False):
+		try:
+			if local:
+				from cloud.tts import OpenAISpeech
+				cloud.tts = OpenAISpeech(heymiro.route("tts"), cfg.get("ai.local"))
+			else:
+				from cloud.tts import TextToSpeech
+				cloud.tts = TextToSpeech(heymiro.route("tts"), cfg.get("tts"))
+		except Exception as e:
+			print("[forebrain] text-to-speech unavailable (" + describe_error(e) + ")")
 
 	if features.get("spotify", False):
 		try:
@@ -142,6 +174,23 @@ def make_cloud_services(heymiro):
 			print("[forebrain] Spotify unavailable (" + describe_error(e) + ")")
 
 	return cloud
+
+
+def check_local_services(heymiro, timeout_s=2.0):
+
+	# one line per local service, so a missing one is obvious at start-up
+	try:
+		import requests
+	except ImportError:
+		return
+	for name, route in (("llm", heymiro.route("llm")), ("speech", heymiro.route("stt"))):
+		base = route.base_url[:-3] if route.base_url.endswith("/v1") else route.base_url
+		try:
+			ok = requests.get(base + "/health", timeout=timeout_s).status_code == 200
+		except Exception:
+			ok = False
+		print("[forebrain] local " + name + " service " + ("ready" if ok else
+			"NOT reachable at " + base + " (start it: docker/local-ai/up.bash)"))
 
 
 

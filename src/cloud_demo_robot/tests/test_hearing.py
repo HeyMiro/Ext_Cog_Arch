@@ -38,7 +38,8 @@ def secs_to_frames(s):
 
 # the robot copy's hearing settings (MiRo's own mics, touch detection on);
 # set explicitly so the same tests pass in the sim copy too
-ROBOT_MICS = "hearing.input_topic=sensors/mics;hearing.touch_from_mics=true"
+# (and the cloud provider: the local one would reach for the speech service)
+ROBOT_MICS = "ai.provider=cloud;hearing.input_topic=sensors/mics;hearing.touch_from_mics=true"
 
 
 def make_sys(environ=None):
@@ -240,7 +241,7 @@ class TestWakeword(unittest.TestCase):
 
 	def setUp(self):
 
-		self.hm = heymiro_config.load(environ={})
+		self.hm = heymiro_config.load(environ={"HEYMIRO_SET": "ai.provider=cloud"})
 		self.ppn = self.hm.path("assets/wakewords/Hey-Miro_en_linux_v3_0_0.ppn")
 		self.created = []
 

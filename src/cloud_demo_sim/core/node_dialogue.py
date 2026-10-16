@@ -49,7 +49,13 @@ class NodeDialogue(node.Node):
 		forebrain = self.nodes.forebrain
 		cloud = forebrain.cloud
 		self.memory = ChatMemory(cfg.get("llm.max_history_turns", 10))
-		self.runner = dlg.TurnRunner(cloud.clients, cloud.tts, self.memory, cloud.persona, cfg)
+		self.runner = dlg.TurnRunner(cloud.clients, cloud.tts, self.memory, cloud.persona, cfg,
+			examples=getattr(cloud, "examples", None),
+			response_format=getattr(cloud, "response_format", None),
+			extra_body=getattr(cloud, "extra_body", None),
+			stream=getattr(cloud, "stream", False),
+			stt_prompt=cfg.get("ai.local.stt_prompt", None) if getattr(heymiro, "local", False) else None,
+			context_in_user=getattr(heymiro, "local", False))
 
 		# a turn may take as long as its three cloud calls together
 		turn_timeout_s = float(cfg.get("stt.timeout_s", 20)) + float(cfg.get("llm.timeout_s", 25)) \
@@ -140,7 +146,7 @@ class NodeDialogue(node.Node):
 
 	# ------------------------------------------------------------------ cloud
 
-	def _submit_turn(self, pcm):
+	def _submit_turn(self, pcm, progress=None):
 
 		# snapshot everything the worker needs now, on the tick
 		valence = arousal = None
@@ -150,7 +156,7 @@ class NodeDialogue(node.Node):
 			valence = float(emotion.valence)
 			arousal = float(emotion.arousal)
 		now_str = datetime.datetime.now().strftime(TIME_FORMAT)
-		return self.nodes.forebrain.worker.submit(self.runner, pcm, valence, arousal, now_str)
+		return self.nodes.forebrain.worker.submit(self.runner, pcm, valence, arousal, now_str, progress)
 
 	# ------------------------------------------------------------------- tick
 

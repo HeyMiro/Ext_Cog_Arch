@@ -90,9 +90,10 @@ class FakeSubmit(object):
 	def __init__(self):
 		self.calls = []
 
-	def __call__(self, pcm):
+	def __call__(self, pcm, progress=None):
 		future = concurrent.futures.Future()
 		self.calls.append((pcm, future))
+		self.progress = progress
 		return future
 
 	def last(self):

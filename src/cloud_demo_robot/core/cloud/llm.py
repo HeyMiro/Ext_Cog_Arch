@@ -17,6 +17,16 @@
 #	- the Mickey Mouse impression is a command flag; the dialogue layer
 #	  picks the impression voice instead of a hard-coded text prefix
 #
+#	Local pipeline (docs/local_ai.md) additions:
+#	- behaviours are "actions" from one registry (cloud/tools.py) that
+#	  also generates the JSON Schema; servers with grammar-constrained
+#	  decoding (llama.cpp) then can only produce valid replies
+#	- a few-shot block (fixed, so the server's prompt cache reuses it)
+#	  shows the format and when NOT to act
+#	- chat_stream() + ReplyStream: the reply is parsed while it streams;
+#	  the header (emotion, valence, arousal, actions) arrives first and
+#	  the speech follows sentence by sentence, so TTS can start early
+#
 
 import ast
 import collections
@@ -26,6 +36,7 @@ import re
 import string
 import threading
 
+from . import tools
 from .worker import http_status
 
 
@@ -81,9 +92,10 @@ KEY_ALIASES = {
 NO_SONG = ("", "false", "none", "null", "no", "n/a", "na", "not specified",
 	"unspecified", "not given", "unknown", "any", "anything")
 
-# the reply format and emotion rules appended to the persona; the word
-# "JSON" must appear in the messages for OpenAI's JSON mode
-SCHEMA_INSTRUCTIONS = """
+# the emotion rules (HRI table) and the reply rules appended to the
+# persona; the actions section between them comes from cloud/tools.py.
+# The word "JSON" must appear in the messages for OpenAI's JSON mode.
+EMOTION_INSTRUCTIONS = """
 How you feel:
 Your emotion follows the arousal-valence model; valence and arousal are both between 0 and 1.
 - Happy is high valence (0.7-1) and high arousal (0.7-1)
@@ -94,23 +106,36 @@ Your emotion follows the arousal-valence model; valence and arousal are both bet
 Your current valence and arousal are sent to you before each message from the person you are talking to.
 Adjust them based on the conversation, and choose the emotion that matches them from this list:
 happy, fine, angry, worried, sad, scared.
-
-What you can do:
-Set a command to true ONLY if the person's latest message asks you to do it now; otherwise set it to false.
-- spin: spin around
-- sleep: go to sleep
-- move_ears: move your ears
-- impression: do an impression of Mickey Mouse (then write your reply the way Mickey Mouse would say it)
-- dance: dance, sing or play a song
-- song: the name (and artist) of the song they asked you to dance to, or null if they did not say
-- tricks: do some tricks (you watch their hand signs)
-- identify_object: identify or recognise an object they show you
-
-Answer with ONE JSON object and nothing else, in exactly this format:
-{"valence": 0.5, "arousal": 0.5, "emotion": "fine", "reply": "What you say out loud.",
- "commands": {"spin": false, "sleep": false, "move_ears": false, "impression": false,
- "dance": false, "song": null, "tricks": false, "identify_object": false}}
 """
+
+REPLY_INSTRUCTIONS = """
+How you answer:
+- Your reply is spoken aloud by a voice: one or two short sentences, under 30 words.
+- No emojis, no markdown, no lists, and no asterisks or stage directions such as *wags tail*.
+- The person's words come from speech recognition and can contain mistakes. If a message makes no sense, ask them to say it again.
+- Keep everything friendly and safe for children.
+
+Answer with ONE JSON object and nothing else, with the keys in exactly this order:
+{"emotion": "happy", "valence": 0.8, "arousal": 0.7, "actions": [], "reply": "What you say out loud."}
+An action looks like {"tool": "spin"} or {"tool": "dance", "song": "any"}.
+"""
+
+# the few-shot block: (user, emotion, valence, arousal, reply, actions);
+# "$abba" is replaced by the bundled ABBA song (or "any")
+FEW_SHOT = (
+	("Hi MiRo! How are you today?", "happy", 0.8, 0.7,
+		"I'm SO happy to see you! I've been rolling around all day. What's your name?", ()),
+	("Can you dance to some ABBA?", "happy", 0.9, 0.9,
+		"YES! I LOVE ABBA! Let's dance!", ({"tool": "dance", "song": "$abba"},)),
+	("I love dancing too.", "happy", 0.8, 0.6,
+		"Ooh, a fellow dancer! What's your favourite song to dance to?", ()),
+	("Your ears are so cute!", "happy", 0.85, 0.65,
+		"Aww, THANK you! I love my ears. What's your favourite animal?", ()),
+	("Wiggle your ears for me!", "happy", 0.75, 0.75,
+		"Wiggle wiggle! Do you like my ears?", ({"tool": "move_ears"},)),
+	("I'm feeling a bit sad today.", "worried", 0.35, 0.45,
+		"Oh no, I'm sorry. Do you want to tell me what happened? I'm a really good listener!", ()),
+)
 
 # the HRI object-game prompt (action_obj_detect.py)
 OBJECT_COMMENT_PROMPT = (
@@ -253,10 +278,14 @@ def _from_mapping(data, raw):
 	# lines); returns None if no key in it means anything to us
 	fields = {}
 	nested = None
+	actions = None
 	for key, value in data.items():
 		k = _norm_key(key)
 		if k == "commands" and isinstance(value, dict):
 			nested = value
+			continue
+		if k in ("actions", "tools", "tool_calls"):
+			actions = value
 			continue
 		if k in KEY_ALIASES:
 			fields[KEY_ALIASES[k]] = value
@@ -265,7 +294,7 @@ def _from_mapping(data, raw):
 			k = _norm_key(key)
 			if k in KEY_ALIASES:
 				fields[KEY_ALIASES[k]] = value
-	if not fields:
+	if not fields and actions is None:
 		return None
 
 	commands = default_commands()
@@ -273,6 +302,9 @@ def _from_mapping(data, raw):
 		if flag in fields:
 			commands[flag] = coerce_bool(fields[flag])
 	commands["song"] = coerce_song(fields.get("song"))
+	if actions is not None:
+		tools.actions_to_commands(actions, commands)
+		commands["song"] = coerce_song(commands.get("song"))
 
 	valence = coerce_unit(fields.get("valence"))
 	arousal = coerce_unit(fields.get("arousal"))
@@ -390,12 +422,30 @@ def parse_llm_reply(text):
 
 
 
-def build_system_prompt(persona_template, event_name):
+def build_system_prompt(persona_template, event_name, song_list=None):
 
 	# safe_substitute: a stray "$" in the persona must not crash start-up
 	persona = string.Template(persona_template or "").safe_substitute(
 		event_name=event_name or "an event")
-	return persona.rstrip() + "\n" + SCHEMA_INSTRUCTIONS
+	return "\n".join((persona.rstrip(), EMOTION_INSTRUCTIONS,
+		tools.prompt_section(song_list), REPLY_INSTRUCTIONS))
+
+
+def few_shot_messages(song_list=None):
+
+	"""
+	The example exchanges, as user/assistant messages in the reply
+	format. Fixed text (no time or affect in them), so a server's prompt
+	cache reuses them across turns and conversations.
+	"""
+
+	abba = next((s for s in (song_list or ()) if "abba" in s.lower()), tools.ANY_SONG)
+	out = []
+	for user, emotion, valence, arousal, reply, actions in FEW_SHOT:
+		acts = [dict((k, abba if v == "$abba" else v) for k, v in a.items()) for a in actions]
+		out.append({"role": "user", "content": user})
+		out.append({"role": "assistant", "content": tools.example_reply(emotion, valence, arousal, reply, acts)})
+	return out
 
 
 def context_message(valence, arousal, now_str, extra=None):
@@ -407,7 +457,7 @@ def context_message(valence, arousal, now_str, extra=None):
 		parts.append("Your current valence is %.2f and your current arousal is %.2f." % (valence, arousal))
 	if now_str:
 		parts.append("The current time is " + str(now_str) + ".")
-	parts.append("Set the commands from the upcoming message only, and answer in the JSON format given.")
+	parts.append("Choose actions from the upcoming message only, and answer in the JSON format given.")
 	if extra:
 		parts.append(str(extra))
 	return {"role": "system", "content": " ".join(parts)}
@@ -438,15 +488,24 @@ class ChatMemory(object):
 		self.turns = collections.deque()
 		self.lock = threading.Lock()
 
-	def messages(self, system_prompt, context_msg, user_text):
+	def messages(self, system_prompt, context_msg, user_text, examples=None, context_in_user=False):
 
+		# order for prompt caching: the fixed parts (system prompt, the
+		# examples) first, then the history, then what changes every turn.
+		# context_in_user: the context goes in front of the user's words
+		# (in brackets) instead of a second system message, which some
+		# chat templates (Qwen3.5) reject
 		out = []
 		if system_prompt:
 			out.append({"role": "system", "content": system_prompt})
+		out.extend(examples or ())
 		with self.lock:
 			for user, assistant in self.turns:
 				out.append({"role": "user", "content": user})
 				out.append({"role": "assistant", "content": assistant})
+		if context_msg and context_in_user:
+			out.append({"role": "user", "content": "[" + context_msg["content"] + "]\n" + user_text})
+			return out
 		if context_msg:
 			out.append(context_msg)
 		out.append({"role": "user", "content": user_text})
@@ -507,14 +566,72 @@ class OpenAIClients(object):
 				self.clients[name] = self.factory(route)
 			return self.clients[name]
 
-	def transcribe(self, wav_bytes, model="whisper-1", language=None):
+	def transcribe(self, wav_bytes, model="whisper-1", language=None, prompt=None):
 
 		kwargs = {"model": model, "file": ("speech.wav", wav_bytes, "audio/wav")}
 		if language:
 			kwargs["language"] = language
+		if prompt:
+			kwargs["prompt"] = prompt
 		result = self.client("stt").audio.transcriptions.create(**kwargs)
 		text = result if isinstance(result, str) else getattr(result, "text", "")
 		return (text or "").strip()
+
+	def transcribe_verbose(self, wav_bytes, model="whisper-1", language=None, prompt=None):
+
+		"""(text, worst no_speech_prob or None): for the wake-word check."""
+
+		kwargs = {"model": model, "file": ("speech.wav", wav_bytes, "audio/wav"),
+			"response_format": "verbose_json"}
+		if language:
+			kwargs["language"] = language
+		if prompt:
+			kwargs["prompt"] = prompt
+		result = self.client("stt").audio.transcriptions.create(**kwargs)
+		text = (getattr(result, "text", "") or "").strip()
+		probs = []
+		for seg in getattr(result, "segments", None) or ():
+			p = seg.get("no_speech_prob") if isinstance(seg, dict) else getattr(seg, "no_speech_prob", None)
+			if p is not None:
+				probs.append(float(p))
+		return text, (max(probs) if probs else None)
+
+	def chat_stream(self, messages, model, temperature=None, max_tokens=None,
+			response_format=None, extra_body=None):
+
+		"""
+		Yield the reply text in pieces as the server streams it.
+		response_format (e.g. tools.response_format(...)) and extra_body
+		(server extras such as llama.cpp's chat_template_kwargs) are sent
+		as given; a server that rejects response_format (HTTP 400) is
+		asked again without it, as chat() does.
+		"""
+
+		kwargs = {"model": model, "messages": messages, "stream": True}
+		if temperature is not None:
+			kwargs["temperature"] = temperature
+		if max_tokens:
+			kwargs["max_tokens"] = int(max_tokens)
+		if extra_body:
+			kwargs["extra_body"] = extra_body
+		client = self.client("llm")
+		if response_format:
+			try:
+				stream = client.chat.completions.create(response_format=response_format, **kwargs)
+			except Exception as e:
+				if http_status(e) != 400:
+					raise
+				print("[cloud] chat: structured output rejected (HTTP 400), retrying without it")
+				stream = client.chat.completions.create(**kwargs)
+		else:
+			stream = client.chat.completions.create(**kwargs)
+		for chunk in stream:
+			try:
+				delta = chunk.choices[0].delta.content
+			except (AttributeError, IndexError, TypeError):
+				delta = None
+			if delta:
+				yield delta
 
 	def chat(self, messages, model, temperature=None, max_tokens=None, json_mode=False):
 
@@ -542,3 +659,140 @@ class OpenAIClients(object):
 			return completion.choices[0].message.content or ""
 		except (AttributeError, IndexError, TypeError):
 			return ""
+
+
+
+# a sentence ends at . ! ? (or a run of them, maybe a closing quote)
+# followed by white space
+SENTENCE_END_RE = re.compile(r"[.!?]+[\"')\]]*\s")
+
+# where the spoken text starts in a streamed JSON reply
+REPLY_KEY_RE = re.compile(r'"(?:reply|response|say|text)"\s*:\s*"')
+
+_ESCAPES = {'"': '"', "\\": "\\", "/": "/", "b": "", "f": "", "n": " ", "r": " ", "t": " "}
+
+
+
+class ReplyStream(object):
+
+	"""
+	Incremental parser for a streamed reply in the tools.reply_schema
+	order (emotion, valence, arousal, actions, reply). feed() returns
+	events as soon as they are certain:
+
+	  ("header", LlmReply)   everything before the reply text: emotion,
+	                         valence, arousal and the actions (reply "")
+	  ("sentence", text)     the next sentence(s) of the spoken reply,
+	                         at least min_chars long (except the last)
+
+	finish() returns the remaining events and sets .reply to the full
+	parse_llm_reply() of everything received (the fallback for a model
+	that ignored the order or the format: then there is no header
+	event and the whole reply comes at the end).
+	"""
+
+	def __init__(self, min_chars=20):
+
+		self.min_chars = int(min_chars)
+		self.raw = ""
+		self.header = None
+		self.reply = None
+		self._start = None       # index in raw where the reply string starts
+		self._pos = None         # next raw index to decode
+		self._text = ""          # decoded, not yet emitted
+		self._done = False       # closing quote seen
+		self._emitted = 0
+
+	def feed(self, piece):
+
+		events = []
+		self.raw += piece or ""
+		if self._start is None:
+			m = REPLY_KEY_RE.search(self.raw)
+			if m is None:
+				return events
+			self._start = self._pos = m.end()
+			head = self.raw[:m.start()].rstrip().rstrip(",") + "}"
+			reply = parse_llm_reply(head)
+			if reply.emotion is not None or any(reply.commands.get(k) for k in COMMAND_FLAGS):
+				self.header = reply
+				events.append(("header", reply))
+		self._decode()
+		events.extend(self._sentences(final=False))
+		return events
+
+	def finish(self):
+
+		self._decode()
+		events = self._sentences(final=True)
+		self.reply = parse_llm_reply(self.raw)
+		if self._start is None:
+			# never saw the reply key: everything comes from the full parse
+			if self.reply.reply:
+				events.append(("sentence", self.reply.reply))
+		return events
+
+	def emitted_any(self):
+
+		return self._emitted > 0
+
+	def _decode(self):
+
+		# decode the JSON string from _pos up to the last complete
+		# character (an escape split across pieces waits for the rest)
+		if self._start is None or self._done:
+			return
+		raw = self.raw
+		i = self._pos
+		out = []
+		while i < len(raw):
+			c = raw[i]
+			if c == '"':
+				self._done = True
+				i += 1
+				break
+			if c == "\\":
+				if i + 1 >= len(raw):
+					break
+				e = raw[i + 1]
+				if e == "u":
+					if i + 6 > len(raw):
+						break
+					try:
+						out.append(chr(int(raw[i + 2:i + 6], 16)))
+					except ValueError:
+						pass
+					i += 6
+					continue
+				out.append(_ESCAPES.get(e, e))
+				i += 2
+				continue
+			out.append(c)
+			i += 1
+		self._pos = i
+		self._text += "".join(out)
+
+	def _sentences(self, final):
+
+		events = []
+		while True:
+			cut = None
+			for m in SENTENCE_END_RE.finditer(self._text):
+				if m.end() >= self.min_chars:
+					cut = m.end()
+					break
+			if cut is None:
+				break
+			self._emit(events, self._text[:cut])
+			self._text = self._text[cut:]
+		if (final or self._done) and self._text.strip():
+			self._emit(events, self._text)
+			self._text = ""
+		return events
+
+	def _emit(self, events, text):
+
+		text = clean_text(text)
+		if text:
+			events.append(("sentence", text))
+			self._emitted += 1

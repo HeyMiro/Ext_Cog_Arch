@@ -56,6 +56,10 @@ DEFAULT_ROUTES = {
 
 DEFAULT_SECRETS_FILE = os.path.join("~", ".config", "heymiro", "secrets.env")
 
+# ai.provider: local -> the services of docker/local-ai (no keys needed)
+LOCAL_LLM_URL = "http://127.0.0.1:8080/v1"
+LOCAL_SPEECH_URL = "http://127.0.0.1:8090/v1"
+
 
 
 class Section(object):
@@ -257,6 +261,13 @@ class HeyMiroConfig(object):
 			elif path == extra:
 				self.warnings.append("HEYMIRO_CONFIG file not found: " + path)
 		data = deep_merge(data, parse_set_overrides(self._env("HEYMIRO_SET")))
+		# ai.provider: local -> ai.local.settings (llm, stt, ... sections)
+		# replace the cloud values (model names, sampling, timeouts)
+		ai = data.get("ai") if isinstance(data.get("ai"), dict) else {}
+		if str(ai.get("provider", "cloud")).strip().lower() == "local":
+			local = ai.get("local") if isinstance(ai.get("local"), dict) else {}
+			if isinstance(local.get("settings"), dict):
+				data = deep_merge(data, local["settings"])
 		return data
 
 	def path(self, p):
@@ -356,9 +367,31 @@ class HeyMiroConfig(object):
 			return self.secret("PICOVOICE_ACCESS_KEY")
 		return None
 
+	@property
+	def local(self):
+
+		# ai.provider: local = everything on this computer (docs/local_ai.md)
+		return str(self.cfg.get("ai.provider", "cloud")).strip().lower() == "local"
+
+	def _local_route(self, name):
+
+		# a HEYMIRO_<NAME>_BASE_URL still wins (e.g. a GPU box on the LAN)
+		cfg = self.cfg
+		env = "HEYMIRO_" + ("LLM" if name == "llm" else "STT") + "_"
+		if name == "llm":
+			base = self._lookup(env + "BASE_URL") or cfg.get("ai.local.llm_url", LOCAL_LLM_URL)
+			key = self._lookup(env + "API_KEY")
+		else:
+			base = self._lookup("HEYMIRO_STT_BASE_URL") or cfg.get("ai.local.speech_url", LOCAL_SPEECH_URL)
+			key = self._lookup("HEYMIRO_STT_API_KEY")
+		timeout = cfg.get("ai.local.timeout_s", 15.0)
+		return Route(name, str(base).rstrip("/"), key, timeout, False)
+
 	def route(self, name):
 
 		cfg = self.cfg
+		if self.local and name in ("llm", "stt", "tts", "turn"):
+			return self._local_route(name)
 		if name in ("llm", "stt"):
 			# per-route override (HEYMIRO_LLM_* / HEYMIRO_STT_*) or the shared OPENAI_* route
 			prefix = "HEYMIRO_" + name.upper() + "_"
@@ -398,21 +431,39 @@ class HeyMiroConfig(object):
 				self.warnings.append(feature + " disabled: " + reason)
 			have[feature] = False
 
-		if not self.route("llm").available or not self.route("stt").available:
-			off("conversation", "OPENAI_API_KEY not set (or HEYMIRO_LLM_*/HEYMIRO_STT_* route)")
+		if self.local:
+			# everything runs on docker/local-ai: no keys to check (the
+			# services are checked at start-up, see NodeForebrain)
+			have["tts"] = True
+			have["vad"] = str(self.cfg.get("ai.local.vad", "silero"))
+			have["vad_cobra"] = have["vad"] == "cobra" and bool(self.picovoice_key())
+			wake = str(self.cfg.get("ai.local.wake_word", "asr"))
+			have["wake_word_backend"] = "porcupine" if wake == "porcupine" else "asr"
+			if have["wake_word_backend"] == "porcupine":
+				keys = [self.picovoice_key(w.get("access_key_env")) for w in (self.cfg.get("hearing.wake_words") or [])]
+				if not any(keys):
+					have["wake_word_backend"] = "asr"
+					self.warnings.append("Porcupine wake words need PICOVOICE_ACCESS_KEY; using local ASR wake words")
+			have["end_of_turn"] = str(self.cfg.get("ai.local.end_of_turn", "smart_turn")) == "smart_turn"
+		else:
+			if not self.route("llm").available or not self.route("stt").available:
+				off("conversation", "OPENAI_API_KEY not set (or HEYMIRO_LLM_*/HEYMIRO_STT_* route)")
 
-		keys = [self.picovoice_key(w.get("access_key_env")) for w in (self.cfg.get("hearing.wake_words") or [])]
-		if not any(keys):
-			off("wake_word", "PICOVOICE_ACCESS_KEY not set (use the core/forebrain/command topic instead)")
+			keys = [self.picovoice_key(w.get("access_key_env")) for w in (self.cfg.get("hearing.wake_words") or [])]
+			if not any(keys):
+				off("wake_word", "PICOVOICE_ACCESS_KEY not set (use the core/forebrain/command topic instead)")
+			have["wake_word_backend"] = "porcupine"
 
-		have["tts"] = self.cfg.get("tts.provider", "none") == "elevenlabs"
-		if have["tts"] and not self.route("tts").available:
-			off("tts", "ELEVENLABS_API_KEY not set (replies are printed, clips still play)")
+			have["tts"] = self.cfg.get("tts.provider", "none") == "elevenlabs"
+			if have["tts"] and not self.route("tts").available:
+				off("tts", "ELEVENLABS_API_KEY not set (replies are printed, clips still play)")
 
-		have["vad_cobra"] = self.cfg.get("hearing.vad", "energy") == "cobra"
-		if have["vad_cobra"] and not self.picovoice_key():
-			have["vad_cobra"] = False
-			self.warnings.append("Cobra VAD unavailable without PICOVOICE_ACCESS_KEY; using the energy VAD")
+			have["vad_cobra"] = self.cfg.get("hearing.vad", "energy") == "cobra"
+			if have["vad_cobra"] and not self.picovoice_key():
+				have["vad_cobra"] = False
+				self.warnings.append("Cobra VAD unavailable without PICOVOICE_ACCESS_KEY; using the energy VAD")
+			have["vad"] = "cobra" if have["vad_cobra"] else "energy"
+			have["end_of_turn"] = False
 
 		if have.get("spotify"):
 			r = self.route("spotify")
