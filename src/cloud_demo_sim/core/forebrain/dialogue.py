@@ -97,6 +97,7 @@ class TurnResult(object):
 		self.speech = speech              # int16 24 kHz ndarray or None (no TTS)
 		self.raw = raw                    # the model's raw answer (for the memory)
 		self.tts_error = tts_error        # sanitized reason TTS failed, if it did
+		self.streamed = streamed          # the speech went out as "speech" progress events
 
 
 
@@ -194,6 +195,7 @@ class TurnRunner(object):
 		header = None
 		tts_error = None
 		speak = True
+		spoken = [0]
 
 		def say(sentence):
 			# synthesize one sentence and hand its chunks to the tick
@@ -201,6 +203,7 @@ class TurnRunner(object):
 			for pcm in self.tts.synthesize_stream(sentence, impression):
 				if len(pcm):
 					progress.put(("speech", pcm))
+					spoken[0] += 1
 
 		for piece in self._chat_pieces(messages):
 			for kind, value in parser.feed(piece):
@@ -221,7 +224,7 @@ class TurnRunner(object):
 				except Exception as e:
 					tts_error = describe_error(e)
 		reply = parser.reply
-		return TurnResult(text, reply, None, parser.raw, tts_error, streamed=parser.emitted_any())
+		return TurnResult(text, reply, None, parser.raw, tts_error, streamed=spoken[0] > 0)
 
 
 

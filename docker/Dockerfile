@@ -113,6 +113,8 @@ RUN set -e; \
 # (psutil, numpy, Pillow, ... installed by distutils) cannot be uninstalled
 # by pip, so ours shadow them instead. torch 2.4.1 from PyPI is the CUDA
 # 12.1 build; another TORCH_VARIANT (e.g. cpu) is swapped in afterwards.
+# silero-vad (local pipeline VAD) is installed without its dependencies:
+# only its TorchScript model file is used, with the torch above.
 COPY docker/requirements.txt docker/constraints.txt /opt/heymiro/
 RUN python3 -m pip install -U "pip<25.1" "setuptools<70" wheel && \
 	python3 -m pip install --ignore-installed \
@@ -123,6 +125,7 @@ RUN python3 -m pip install -U "pip<25.1" "setuptools<70" wheel && \
 			--index-url "https://download.pytorch.org/whl/${TORCH_VARIANT}" torch==2.4.1 torchvision==0.19.1; \
 	fi && \
 	python3 -m pip install --force-reinstall --no-deps opencv-contrib-python==4.10.0.84 && \
+	python3 -m pip install --no-deps silero-vad==5.1.2 && \
 	(python3 -m pip check || true) && \
 	python3 -m pip freeze > /opt/heymiro/pip-freeze.txt
 

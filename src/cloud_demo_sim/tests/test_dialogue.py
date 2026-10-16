@@ -61,8 +61,9 @@ class FakeVoice(object):
 			self.music = True
 		return 1.0
 
-	def say_pcm(self, pcm):
+	def say_pcm(self, pcm, append=False):
 		self.said.append(pcm)
+		self.appended = getattr(self, "appended", 0) + (1 if append else 0)
 		self.speaking = True
 		return len(pcm) / 24000.0
 

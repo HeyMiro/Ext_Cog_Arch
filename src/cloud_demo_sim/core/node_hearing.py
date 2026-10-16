@@ -161,8 +161,16 @@ class NodeHearing(node.Node):
 			def transcribe(wav):
 				return clients.transcribe_verbose(wav, model, language, prompt=WAKE_PROMPT)
 
+			def found(kids):
+				# straight from the spotter's thread: no need to wait for
+				# the next mic frame (and the mask may have changed meanwhile)
+				mask = self._mask
+				for kid in kids:
+					if mask is None or kid in mask:
+						self._post("wake", kid)
+
 			ids = [w.get("id") for w in (cfg.get("wake_words") or [])]
-			return AsrKeywordSpotter(ids, transcribe, threshold=cfg.get("vad_threshold", 0.6))
+			return AsrKeywordSpotter(ids, transcribe, threshold=cfg.get("vad_threshold", 0.6), on_found=found)
 		except Exception as e:
 			print("[hearing] local wake words disabled: " + str(e))
 			return None
