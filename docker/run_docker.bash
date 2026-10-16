@@ -29,6 +29,7 @@
 #   --no-audio           do not pass the host sound server / devices
 #   --no-x11             do not pass the X display (no Gazebo GUI)
 #   --privileged         run privileged (normally not needed)
+#   --local-ai [9b]      start the local AI services first (docker/local-ai/up.bash)
 #   -- CMD ...           command to run instead of an interactive bash
 
 set -e
@@ -56,6 +57,7 @@ SECRETS="$USER_HOME/.config/heymiro/secrets.env"
 AUDIO=1
 X11=1
 PRIVILEGED=0
+LOCAL_AI=""
 CMD=(bash)
 
 usage() {
@@ -75,11 +77,23 @@ while [ $# -gt 0 ]; do
 		--no-audio) AUDIO=0; shift ;;
 		--no-x11) X11=0; shift ;;
 		--privileged) PRIVILEGED=1; shift ;;
+		--local-ai)
+			LOCAL_AI="default"; shift
+			if [ "$1" = "9b" ]; then LOCAL_AI="9b"; shift; fi ;;
 		--) shift; CMD=("$@"); break ;;
 		-h|--help) usage; exit 0 ;;
 		*) echo "unknown option: $1 (see --help)"; exit 2 ;;
 	esac
 done
+
+# --- local AI services (LLM, speech) on this computer's GPU ------------------------------
+if [ -n "$LOCAL_AI" ]; then
+	if [ "$LOCAL_AI" = "9b" ]; then
+		"$REPO_ROOT/docker/local-ai/up.bash" --9b
+	else
+		"$REPO_ROOT/docker/local-ai/up.bash"
+	fi
+fi
 
 # docker -v needs an absolute path (a relative one names a volume instead)
 if [ -e "$SECRETS" ]; then

@@ -45,7 +45,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck -x docker/*.sh docker/*.bash src/*/run_*.sh src/*/tools/*.bash
+      - run: shellcheck -x docker/*.sh docker/*.bash docker/local-ai/*.bash src/*/run_*.sh src/*/tools/*.bash
+
+  local-ai:
+    # the local AI services: compose file valid, speech service builds and
+    # its server module compiles (models are not downloaded in CI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk space (torch CUDA wheels)
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          large-packages: false
+      - run: docker volume create heymiro-models && docker compose -f docker/local-ai/compose.yaml config -q
+      - run: python3 -m py_compile docker/local-ai/speech/server.py
+      - run: docker build -t heymiro-speech:ci docker/local-ai/speech
 
   secret-scan:
     runs-on: ubuntu-latest

@@ -33,6 +33,13 @@ Relative paths are resolved from the project folder.
 | `platform` | `robot` / `sim` | Compared with the simulator flag in `sensors/package`; a mismatch prints a warning. |
 | `mdk.demo_flags` | `vx` / `vxS` | Stock MDK demo flags forced on top of the robot's `platform_parameters`: `v` = MiRo's own vocaliser off (it would hum over speech), `x` = special AprilTag responses off, `S` = don't orient to sound. The full list is printed by `pars.py` at start-up. |
 
+### ai
+
+`ai.provider` chooses `local` (the default: docker/local-ai on this computer's GPU) or `cloud` (the HRI '25 services).
+Every `ai.local.*` key is described in [local_ai.md](local_ai.md#settings-configheymiroyaml-ai). With `local`,
+`ai.local.settings` replaces the matching cloud settings (`llm.model`, `stt.model`, ...), and the feature checks
+below that need keys do not apply.
+
 ### features
 
 Each switch is also turned off automatically when the key it needs is missing.
