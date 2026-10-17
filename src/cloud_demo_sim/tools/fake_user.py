@@ -132,9 +132,11 @@ def main():
 	qlock = threading.Lock()
 	done_at = {}
 
+	stopping = threading.Event()
+
 	def publisher():
 		t_next = time.monotonic()
-		while not rospy.is_shutdown():
+		while not rospy.is_shutdown() and not stopping.is_set():
 			with qlock:
 				item = queue[0] if queue else None
 			payload = None
@@ -150,7 +152,10 @@ def main():
 			if payload is None:
 				noise = (rng.standard_normal(audio_util.MIC_BLOCK) * noise_amp).astype(np.float32)
 				payload = audio_util.to_miro_frame(noise)
-			pub.publish(Int16MultiArray(data=payload.reshape(-1).tolist() if hasattr(payload, "reshape") else payload))
+			try:
+				pub.publish(Int16MultiArray(data=payload.reshape(-1).tolist()))
+			except Exception:
+				return          # ROS is shutting down
 			t_next += FRAME_PERIOD
 			time.sleep(max(0.0, t_next - time.monotonic()))
 
@@ -215,6 +220,8 @@ def main():
 			break
 		time.sleep(0.1)
 	time.sleep(3.0)
+
+	stopping.set()
 
 	# latency: end of each line -> next "responding" / task start / thinking
 	hist = list(watch.history)

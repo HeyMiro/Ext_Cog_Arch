@@ -441,6 +441,25 @@ class TestWakePhrases(unittest.TestCase):
 		self.wait(lambda: found)
 		self.assertEqual(found, ["stop_miro"])
 
+	def test_busy_skips_long_speech(self):
+
+		# during a conversation only short bursts ("Stop MiRo") are transcribed
+		s, calls, found = self.spotter(("can you dance to dancing queen", 0.0))
+		s.mask = frozenset(["stop_miro"])
+		self.speak(s, n_voiced=80)           # ~2.6 s sentence
+		time.sleep(0.1)
+		self.assertEqual(calls, [])
+		self.assertEqual(s.skipped, 1)
+		self.speak(s, n_voiced=30)           # ~1 s: transcribed
+		self.wait(lambda: calls)
+		self.assertEqual(len(calls), 1)
+		# when idle, a sentence of the same kind is transcribed
+		s.mask = None
+		self.speak(s, n_voiced=60)           # ~1.9 s, under max_segment_s
+		self.wait(lambda: len(calls) == 2)
+		time.sleep(0.1)
+		self.assertEqual(len(calls), 2)
+
 	def test_long_speech_is_cut(self):
 
 		s, calls, found = self.spotter(("blah", 0.0), max_segment_s=1.0)

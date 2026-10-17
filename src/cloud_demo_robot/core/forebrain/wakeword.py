@@ -337,12 +337,19 @@ class AsrKeywordSpotter(object):
 
 	Only one transcription runs at a time and at most one waits; anything
 	more is dropped (a wake phrase is short, and old audio is stale).
+
+	While MiRo is busy (a mask is set, e.g. only "stop_miro" during a
+	conversation or a dance), speech longer than busy_max_s is not sent at
+	all: "Stop MiRo" is short, and the user's sentences are already being
+	transcribed by the conversation, so transcribing them twice would only
+	make the conversation's own speech-to-text wait.
 	"""
 
 	needs_prob = True
 
 	def __init__(self, ids, transcribe, threshold=0.5, onset_frames=2, end_silence_s=0.35,
-			max_segment_s=2.5, preroll_s=0.3, max_no_speech=0.6, log=print, on_found=None):
+			max_segment_s=2.5, preroll_s=0.3, max_no_speech=0.6, log=print, on_found=None,
+			busy_max_s=1.5):
 
 		self.ids = [i for i in ids if i in WAKE_LEADS]
 		if not self.ids:
@@ -354,6 +361,9 @@ class AsrKeywordSpotter(object):
 		rate = float(audio_util.HEARING_RATE)
 		self.end_frames = max(1, int(round(end_silence_s * rate / frame)))
 		self.max_frames = int(round(max_segment_s * rate / frame))
+		self.busy_max_frames = max(1, int(round(busy_max_s * rate / frame)))
+		self._skipping = False    # the current speech is too long to be a wake phrase
+		self.skipped = 0
 		self.max_no_speech = float(max_no_speech)
 		self.log = log
 		self.on_found = on_found
@@ -388,11 +398,18 @@ class AsrKeywordSpotter(object):
 		else:
 			self._seg.append(frame)
 			self._quiet = 0 if voiced else self._quiet + 1
+			busy = self.mask is not None
+			if busy and not self._skipping and len(self._seg) > self.busy_max_frames:
+				# too long for "Stop MiRo": not worth a transcription
+				self._skipping = True
+				self.skipped += 1
 			if self._quiet >= self.end_frames or len(self._seg) >= self.max_frames:
-				self._submit(np.concatenate(self._seg))
+				if not self._skipping:
+					self._submit(np.concatenate(self._seg))
 				self._seg = None
 				self._run = 0
 				self._pre.clear()
+				self._skipping = self._skipping and self._quiet < self.end_frames
 		with self._lock:
 			found, self._found = self._found, []
 		return found
@@ -402,6 +419,7 @@ class AsrKeywordSpotter(object):
 		# forget a segment in progress (the mics were muted)
 		self._seg = None
 		self._run = 0
+		self._skipping = False
 		self._pre.clear()
 
 	def _submit(self, pcm):
