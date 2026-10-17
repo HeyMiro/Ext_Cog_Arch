@@ -18,6 +18,8 @@ Every behaviour competes through MiRo's basal-ganglia action selection and modul
 | `local` (default) | local Whisper, Silero, smart-turn | Whisper large-v3-turbo | Qwen3.5 (llama.cpp) | Kokoro | an NVIDIA GPU; no keys, works offline |
 | `cloud` (HRI '25) | Picovoice Porcupine + Cobra | OpenAI Whisper | GPT-4o | ElevenLabs | API keys |
 
+**To run it:** [Gazebo simulator guide](docs/RUN_SIMULATOR.md) · [real robot guide](docs/RUN_ROBOT.md).
+
 The local pipeline streams the reply, so MiRo starts speaking while the rest is still being generated. See
 [docs/local_ai.md](docs/local_ai.md) for the design, the models and measured latency. A comparison with the original
 HRI '25 code is in [docs/hri25_parity.md](docs/hri25_parity.md).
@@ -95,8 +97,8 @@ tests/                     unit tests (no ROS needed)
 
 ## Install Docker and get the code
 
-> **New to this? Follow [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).** It is a step-by-step guide with every
-> command to copy and paste, what each one does, and what you should see.
+> **Step-by-step guides** with every command to copy and paste:
+> **[Run in the Gazebo simulator](docs/RUN_SIMULATOR.md)** and **[Run on the real robot](docs/RUN_ROBOT.md)**.
 
 1. Install Docker on your Ubuntu machine: https://docs.docker.com/engine/install/ubuntu/
 2. Recommended: run Docker without sudo (https://docs.docker.com/engine/install/linux-postinstall/). `run_docker.bash` also works under sudo; it then uses your own secrets file and sound server.
@@ -127,7 +129,7 @@ tests/                     unit tests (no ROS needed)
 ## Local AI services (default provider)
 
 ```bash
-docker run --rm --gpus all ubuntu nvidia-smi   # check the GPU is visible (if not: GETTING_STARTED 3.6)
+docker run --rm --gpus all ubuntu nvidia-smi   # check the GPU is visible (if not: docs/RUN_SIMULATOR.md)
 docker/local-ai/download_models.bash          # once, ~5 GB (pinned, ungated Hugging Face models)
 docker/run_docker.bash --sim --local-ai       # starts the services, then the container
 ```

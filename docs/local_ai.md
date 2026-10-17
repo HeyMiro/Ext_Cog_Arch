@@ -20,7 +20,7 @@ latency … and enhance privacy"*.
 ```bash
 # once: download the models (~5 GB; add --9b for the larger LLM)
 docker/local-ai/download_models.bash
-# check that containers see the GPU (if not: docs/GETTING_STARTED.md 3.6)
+# check that containers see the GPU (if not: RUN_SIMULATOR.md, 'If something goes wrong')
 docker run --rm --gpus all ubuntu nvidia-smi
 
 # every time: start the services, then the demo as usual
@@ -88,9 +88,10 @@ All the models are ungated on Hugging Face (no login, no licence click-through) 
 | End of turn | `pipecat-ai/smart-turn-v3` v3.2 (int8 ONNX) | BSD-2-Clause | 9 MB | CPU |
 | Voice activity | Silero VAD v5 (pip `silero-vad`, model file only) | MIT | 2 MB | CPU (robot container) |
 
-**Why 4B by default:** on a 12 GB card it leaves room for Gazebo, YOLO and the speech models at the same time
-(see *GPU memory* below). On the physical robot nothing else uses the GPU, so the 9B model fits too:
-`docker/local-ai/up.bash --9b`. Compare them with `tools/eval_dialogue.py`.
+**Why 4B by default:** measured on the RTX 4070 Ti with `tools/eval_dialogue.py`, 9B picked the right action no more
+often than 4B (38/40 each, F1 0.96 against 0.95). It was slower, though: 0.69 s against 0.44 s to the first sentence.
+It also needs 9.5 GB instead of 7 GB with the speech models loaded, which is too much alongside Gazebo. It fits on the
+robot (no Gazebo on the GPU): `--local-ai 9b`.
 
 **MiRo's voice:** the paper chose a higher-pitched voice to suit MiRo's size. Kokoro's `af_heart` is synthesized
 slower and resampled faster (`ai.local.pitch: 1.15`), which raises the pitch without changing the speed. The Mickey

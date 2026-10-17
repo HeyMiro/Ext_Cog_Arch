@@ -30,7 +30,7 @@ fi
 # a GPU is usable via the nvidia runtime (older Docker) or CDI (Docker 25+)
 if ! docker info 2>/dev/null | grep -qiE 'runtimes:.*nvidia|nvidia\.com\/gpu'; then
 	echo "WARNING: Docker cannot use an NVIDIA GPU, so the AI runs on the CPU (about 15 s per answer"
-	echo "         instead of about 1 s). To use the GPU, see docs/GETTING_STARTED.md, steps 3.5 and 3.6."
+	echo "         instead of about 1 s). To use the GPU, see \"If something goes wrong\" in docs/RUN_SIMULATOR.md."
 	COMPOSE+=(-f "$HERE/compose.cpu.yaml")
 fi
 
