@@ -18,9 +18,10 @@ latency … and enhance privacy"*.
 ## Quick start
 
 ```bash
-# once: let Docker use the GPU, and download the models (~5 GB; add --9b for the larger LLM)
-sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
+# once: download the models (~5 GB; add --9b for the larger LLM)
 docker/local-ai/download_models.bash
+# check that containers see the GPU (if not: docs/GETTING_STARTED.md 3.6)
+docker run --rm --gpus all ubuntu nvidia-smi
 
 # every time: start the services, then the demo as usual
 docker/run_docker.bash --sim --local-ai          # or --robot-ip <IP> --local-ai
@@ -212,5 +213,40 @@ the "talking about it is not a request" rule, the score was 36/40 (F1 0.91), wit
 - The speech service alone (CPU): Kokoro synthesizes a sentence in 0.35–0.45 s, and smart-turn decides in about
   17 ms.
 
-**Run 2: GPU (RTX 4070 Ti).** To do once Docker's NVIDIA runtime is configured. Expected: Whisper about 0.15 s, LLM
-header under 0.2 s, about 1 s from the end of speech to MiRo's voice.
+**Run 2: GPU (RTX 4070 Ti, 12 GB).** Same machine and models.
+
+| Step | CPU | GPU |
+|---|---|---|
+| Whisper large-v3-turbo, 3 s utterance | 3.7 s | 0.10 s |
+| Kokoro, one sentence | 0.4 s | 0.06 s |
+| LLM: time to header (emotion + actions) | 2.7 s | 0.37 s (p50) |
+| LLM: time to the first sentence | 3.3 s | 0.44 s (p50) |
+| LLM prompt-cache warm-up at start | 8–12 s | 0.5 s |
+
+`tools/eval_dialogue.py` on the GPU:
+
+- **Format:** 40/40 valid JSON, all in schema order.
+- **Actions:** 38/40 exact, F1 0.95.
+- **The two misses:** "I'm so tired, I want to sleep" → MiRo naps too; "What is this object?" → no object game.
+  Results vary by one or two cases between runs at temperature 0.7.
+
+`tools/fake_user.py` in Gazebo, measured from the moment the user's voice stops (this includes smart-turn deciding
+that they have finished):
+
+| User says | MiRo reacts | after |
+|---|---|---|
+| "Hey MiRo!" | greets | 0.38 s |
+| "Hi! What is your favourite band?" | starts answering | 0.91 s |
+| "Can you spin around for me?" | starts answering (and spins) | 1.20 s |
+| "Can you dance to Dancing Queen?" | starts dancing | 1.23 s |
+| "Stop MiRo!" | stops and says goodbye | 0.46 s |
+
+The HRI '25 demo waited a fixed 3 s of silence before it started transcribing, and the paper reports 0.5–5 s after
+that.
+
+**GPU memory** with Gazebo, the camera clients, YOLOv10m, Qwen3.5-4B + mmproj, Whisper and Kokoro all running:
+7.9 GB of 12 GB (the desktop included).
+
+**Docker and the GPU:** Docker 25+ exposes NVIDIA GPUs through CDI (`docker info` lists `nvidia.com/gpu=all`), and no
+`nvidia` runtime entry is needed. `up.bash` and `run_docker.bash` accept either. Without a usable GPU, `up.bash`
+starts the same services on the CPU (`compose.cpu.yaml`) with a warning.

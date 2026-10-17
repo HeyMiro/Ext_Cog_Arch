@@ -14,7 +14,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE=(docker compose -f "$HERE/compose.yaml")
 
 case "$1" in
-	--down) "${COMPOSE[@]}" down; exit 0 ;;
+	--down) "${COMPOSE[@]}" down --remove-orphans; exit 0 ;;
 	--9b)
 		export HEYMIRO_LLM_GGUF=/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf
 		export HEYMIRO_LLM_MMPROJ=/models/unsloth/Qwen3.5-9B-GGUF/mmproj-F16.gguf ;;
@@ -27,16 +27,17 @@ if ! docker volume inspect heymiro-models >/dev/null 2>&1; then
 	echo "no models yet: run $HERE/download_models.bash first"
 	exit 1
 fi
-if ! docker info 2>/dev/null | grep -qi 'runtimes:.*nvidia'; then
-	echo "Docker cannot use the GPU. Run once:"
-	echo "  sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker"
-	exit 1
+# a GPU is usable via the nvidia runtime (older Docker) or CDI (Docker 25+)
+if ! docker info 2>/dev/null | grep -qiE 'runtimes:.*nvidia|nvidia\.com\/gpu'; then
+	echo "WARNING: Docker cannot use an NVIDIA GPU, so the AI runs on the CPU (about 15 s per answer"
+	echo "         instead of about 1 s). To use the GPU, see docs/GETTING_STARTED.md, steps 3.5 and 3.6."
+	COMPOSE+=(-f "$HERE/compose.cpu.yaml")
 fi
 
 "${COMPOSE[@]}" up -d --build
 
 echo -n "waiting for the models to load"
-for _ in $(seq 1 120); do
+for _ in $(seq 1 180); do
 	if curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1 && curl -fsS http://127.0.0.1:8090/health >/dev/null 2>&1; then
 		echo " ready"
 		curl -fsS http://127.0.0.1:8090/health; echo

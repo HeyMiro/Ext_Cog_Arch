@@ -55,7 +55,13 @@ def synthesize(speech_url, text, voice, timeout=30.0):
 	r = requests.post(speech_url.rstrip("/") + "/audio/speech", timeout=timeout,
 		json={"input": text, "voice": voice, "response_format": "pcm", "stream": False, "pitch": 1.0})
 	r.raise_for_status()
-	return np.frombuffer(r.content[:len(r.content) // 2 * 2], dtype="<i2").copy(), int(r.headers.get("X-Sample-Rate", 24000))
+	pcm = np.frombuffer(r.content[:len(r.content) // 2 * 2], dtype="<i2").copy()
+	# trim the silence the TTS leaves around the words, so "end of the
+	# line" in the latency table is when the voice really stops
+	loud = np.flatnonzero(np.abs(pcm.astype(np.int32)) > 300)
+	if loud.size:
+		pcm = pcm[loud[0]:loud[-1] + 1]
+	return pcm, int(r.headers.get("X-Sample-Rate", 24000))
 
 
 def load_script(path):
@@ -226,16 +232,18 @@ def main():
 	# latency: end of each line -> next "responding" / task start / thinking
 	hist = list(watch.history)
 	print()
-	print("%-36s %10s %10s" % ("user said", "->thinking", "->answer"))
+	print("%-36s %14s" % ("user said", "MiRo reacts"))
 	for row in log:
 		end = row["end"] or row["start"]
-		think = next((t for t, d, k in hist if t > end and d == "thinking"), None)
-		answer = next((t for t, d, k in hist if t > end and (d in ("responding", "greeting", "goodbye") or k)), None)
-		row["to_thinking_s"] = None if think is None else round(think - end, 3)
-		row["to_answer_s"] = None if answer is None else round(answer - end, 3)
-		print("%-36s %10s %10s" % (row["text"][:36],
-			"-" if think is None else "%.2f s" % (think - end),
-			"-" if answer is None else "%.2f s" % (answer - end)))
+		# the first reaction after the user started speaking: greeting (wake
+		# word), an answer, a task starting, or saying goodbye (stop)
+		react = next(((t, d, k) for t, d, k in hist if t > row["start"] and
+			(d in ("greeting", "responding", "goodbye") or k)), None)
+		row["reaction"] = None if react is None else (react[2] or react[1])
+		row["to_reaction_s"] = None if react is None else round(react[0] - end, 3)
+		print("%-36s %14s  %s" % (row["text"][:36],
+			"-" if react is None else "%+.2f s" % (react[0] - end), row["reaction"] or ""))
+	print("(seconds after the user's voice stopped; negative = MiRo reacted before the line ended)")
 	if args.log:
 		with open(args.log, "w") as f:
 			json.dump({"steps": log, "states": hist}, f, indent=1)

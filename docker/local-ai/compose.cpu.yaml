@@ -1,0 +1,31 @@
+# Overlay for computers whose Docker cannot use an NVIDIA GPU: the same
+# services on the CPU (slow, ~15 s per answer, but everything works).
+# up.bash adds it automatically when the GPU runtime is missing.
+services:
+  llm:
+    deploy: !reset {}
+    command:
+      - --model
+      - ${HEYMIRO_LLM_GGUF:-/models/unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q4_K_M.gguf}
+      - --mmproj
+      - ${HEYMIRO_LLM_MMPROJ:-/models/unsloth/Qwen3.5-4B-GGUF/mmproj-F16.gguf}
+      - --alias
+      - heymiro
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --ctx-size
+      - ${HEYMIRO_LLM_CTX:-16384}
+      - --parallel
+      - "2"
+      - --jinja
+      - --reasoning-budget
+      - "0"
+      - --chat-template-kwargs
+      - '{"enable_thinking": false}'
+      - --cache-reuse
+      - "256"
+      - --no-webui
+  speech:
+    deploy: !reset {}
