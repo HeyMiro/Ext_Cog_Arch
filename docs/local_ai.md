@@ -183,4 +183,31 @@ Measured on an RTX 4070 Ti (12 GB) with everything running: see [Results](#resul
 
 ## Results
 
-<!-- filled in from the measured runs -->
+**Run 1: CPU only** (October 2026, 24-thread desktop CPU; Docker's GPU runtime not yet configured on the test
+machine). Everything ran locally, but without the GPU.
+
+`tools/eval_dialogue.py`, Qwen3.5-4B Q4_K_M, 40 cases:
+
+| Metric | Result |
+|---|---|
+| valid JSON | 40/40 |
+| keys in schema order | 40/40 |
+| actions exactly right (incl. the song) | 39/40 |
+| precision / recall / F1 | 0.96 / 1.00 / 0.98 |
+| reply length | mean 11.7 words, max 18; no emoji or stage directions |
+| latency (CPU) | header p50 2.7 s, first sentence p50 3.3 s |
+
+The one miss was "I'm so tired, I want to sleep": MiRo decided to nap too. Before the negative few-shot example and
+the "talking about it is not a request" rule, the score was 36/40 (F1 0.91), with three false triggers.
+
+`tools/fake_user.py` in Gazebo (wake → question → spin → "dance to Dancing Queen" → "Stop MiRo"):
+
+- Every step was understood and carried out, in three runs.
+- End of the user's words → MiRo's answer took about 18 s on the CPU: Whisper about 3.7 s, plus LLM prompt
+  processing.
+- Wake word: about 5 s on the CPU.
+- The speech service alone (CPU): Kokoro synthesizes a sentence in 0.35–0.45 s, and smart-turn decides in about
+  17 ms.
+
+**Run 2: GPU (RTX 4070 Ti).** To do once Docker's NVIDIA runtime is configured. Expected: Whisper about 0.15 s, LLM
+header under 0.2 s, about 1 s from the end of speech to MiRo's voice.

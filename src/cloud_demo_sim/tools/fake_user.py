@@ -106,6 +106,7 @@ def main():
 	ap.add_argument("--noise-dbfs", type=float, default=-60.0, help="background noise between lines")
 	ap.add_argument("--timeout", type=float, default=60.0, help="max wait per step (s)")
 	ap.add_argument("--log", default=None, help="write the timing log (JSON) here")
+	ap.add_argument("--play", action="store_true", help="also play each line on this computer's speaker (demos)")
 	args = ap.parse_args()
 
 	if args.speech_url is None:
@@ -191,6 +192,12 @@ def main():
 			print("[fake_user] gave up waiting for '%s' (state: %s)" % (cond, watch.get()))
 			break
 		print("[fake_user] says: " + text)
+		if args.play:
+			try:
+				import sounddevice as sd
+				sd.play(audio_util.to_int16(pcm), rate)
+			except Exception as e:
+				print("[fake_user] cannot play (" + e.__class__.__name__ + ")")
 		t_start = time.time()
 		with qlock:
 			queue.append((i, replay_frames(pcm, rate, args.gain_db)))
