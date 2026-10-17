@@ -203,8 +203,11 @@ the "talking about it is not a request" rule, the score was 36/40 (F1 0.91), wit
 `tools/fake_user.py` in Gazebo (wake → question → spin → "dance to Dancing Queen" → "Stop MiRo"):
 
 - Every step was understood and carried out, in three runs.
-- End of the user's words → MiRo's answer took about 18 s on the CPU: Whisper about 3.7 s, plus LLM prompt
-  processing.
+- End of the user's words → MiRo's answer took about 18 s on the CPU at first, and about 14 s after two fixes:
+  - the busy wake-word check no longer transcribes whole sentences a second time;
+  - the LLM prompt cache is warmed at start-up.
+
+  The rest is Whisper (about 3.7 s) and LLM processing on a CPU that Gazebo also uses.
 - Wake word: about 5 s on the CPU.
 - The speech service alone (CPU): Kokoro synthesizes a sentence in 0.35–0.45 s, and smart-turn decides in about
   17 ms.
