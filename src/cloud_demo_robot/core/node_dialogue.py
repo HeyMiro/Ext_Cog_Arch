@@ -26,6 +26,7 @@ import node
 from cloud.llm import ChatMemory, EMOTION_CENTRES
 from forebrain import dialogue as dlg
 from node_forebrain import RESUME_PROMPT
+from forebrain.scene_context import describe_scene
 
 # HRI'25 used the time in the prompt; this is the format we send
 TIME_FORMAT = "%A %d %B %Y, %H:%M"
@@ -156,7 +157,12 @@ class NodeDialogue(node.Node):
 			valence = float(emotion.valence)
 			arousal = float(emotion.arousal)
 		now_str = datetime.datetime.now().strftime(TIME_FORMAT)
-		return self.nodes.forebrain.worker.submit(self.runner, pcm, valence, arousal, now_str, progress)
+		scene = None
+		if self.features.get("scene_context", False):
+			scene = describe_scene(getattr(self.state, "scene_objects", None))
+			if scene:
+				print("[dialogue] scene context: " + scene)
+		return self.nodes.forebrain.worker.submit(self.runner, pcm, valence, arousal, now_str, progress, scene=scene)
 
 	# ------------------------------------------------------------------- tick
 

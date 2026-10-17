@@ -7,9 +7,13 @@
 #
 #	  gestures  mediapipe GestureRecognizer (IMAGE mode)    -> core/scene/gesture
 #	  objects   ultralytics YOLO, only identify.classes      -> core/scene/objects
+#	  context   the same YOLO, scene.context_classes (default all 80 COCO
+#	            classes), while MiRo is in a conversation: what it sees is
+#	            given to the LLM as a few words of text (forebrain/
+#	            scene_context.py) instead of as an image
 #
 #	The main client says what to look for on core/scene/mode (off |
-#	gestures | objects | both) and re-sends it every second; a mode not
+#	gestures | objects | both | context) and re-sends it every second; a mode not
 #	heard for MODE_STALE_S counts as "off", so the camera and the models
 #	go quiet when main stops. The camera is only subscribed while the
 #	mode is not off, because a second copy of the camera stream over
@@ -56,7 +60,7 @@ import node
 
 __all__ = ["NodeScene"]
 
-MODES = ("off", "gestures", "objects", "both")
+MODES = ("off", "gestures", "objects", "both", "context")
 
 # main publishes the mode every second; three missed means main is gone
 MODE_STALE_S = 3.0
@@ -87,7 +91,7 @@ HRI_DIST_COEFFS = [-3.63299415e+00, 1.52661324e+01, -7.23780207e-03, -7.48630198
 def mode_wants(mode):
 
 	# (run gestures, run objects) for a scene mode
-	return mode in ("gestures", "both"), mode in ("objects", "both")
+	return mode in ("gestures", "both"), mode in ("objects", "both", "context")
 
 
 class ModeTracker(object):
@@ -363,6 +367,9 @@ class NodeScene(node.Node):
 		self.weights = resolve_weights(heymiro, cfg.get("scene.yolo_weights", "yolov10m.pt"))
 		self.gesture_model = heymiro.path(cfg.get("scene.gesture_model", "assets/models/gesture_recognizer.task"))
 		self.classes = [str(c) for c in (cfg.get("identify.classes") or [])]
+		# classes for the conversation context ([] or missing = all of the model's)
+		self.context_classes = [str(c) for c in (cfg.get("scene.context_classes") or [])]
+		self.context_ids = None
 		confirm = cfg.get("identify.confirm") or [4, 10]
 		self.objects_confirm = (int(confirm[0]), int(confirm[1]))
 
@@ -539,7 +546,7 @@ class NodeScene(node.Node):
 			self.publish(self.pub_gesture, gesture_message(stamp, self.camera, gesture, score))
 
 		if want_objects and self.ensure_yolo():
-			objects = self.detect_objects(bgr)
+			objects = self.detect_objects(bgr, self.context_ids if mode == "context" else self.yolo_ids)
 			confirmed = self.objects_kofn.update(best_scores(objects))
 			self.publish(self.pub_objects, objects_message(stamp, self.camera, objects, [c[0] for c in confirmed]))
 
@@ -568,12 +575,12 @@ class NodeScene(node.Node):
 		image = self.mp.Image(image_format=self.mp.ImageFormat.SRGB, data=rgb)
 		return top_gesture(self.recognizer.recognize(image))
 
-	def detect_objects(self, bgr):
+	def detect_objects(self, bgr, ids=None):
 
-		# YOLO takes the BGR numpy image directly
+		# YOLO takes the BGR numpy image directly; ids = class filter (None = all)
 		kwargs = {"verbose": False, "conf": self.yolo_conf}
-		if self.yolo_ids is not None:
-			kwargs["classes"] = self.yolo_ids
+		if ids is not None:
+			kwargs["classes"] = ids
 		if self.device is not None:
 			kwargs["device"] = self.device
 		objects = []
@@ -623,6 +630,11 @@ class NodeScene(node.Node):
 				return False
 			# an empty identify.classes list means every class
 			self.yolo_ids = ids if self.classes else None
+			if self.context_classes:
+				cids, cmissing = class_ids_for(model.names, self.context_classes)
+				if cmissing:
+					print("[scene] WARN context classes not known: " + ", ".join(cmissing))
+				self.context_ids = cids or None
 			self.yolo = model
 			print("[scene] YOLO ready: " + os.path.basename(self.weights) + ", " +
 				(str(len(ids)) + " classes" if self.yolo_ids is not None else "all classes"))

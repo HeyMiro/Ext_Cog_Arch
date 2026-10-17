@@ -38,7 +38,7 @@ ai:
     wake_word: asr              # asr (local speech-to-text) | porcupine (needs a key)
     vad: silero                 # silero | energy | cobra (needs a key)
     end_of_turn: smart_turn     # smart_turn | silence (hearing.end_silence_s)
-    turn_threshold: 0.5         # smart-turn probability that counts as "finished"
+    turn_threshold: 0.9         # smart-turn probability that counts as "finished" (finished speech scores >= 0.97)
     turn_min_silence_s: 0.3     # first ask smart-turn after this much silence
     end_silence_s: 1.2          # ... and stop waiting after this much at most
     stt_prompt: "MiRo"          # spelling hint for the speech-to-text
@@ -67,6 +67,7 @@ features:
   touch_reactions: true         # ear/tail scratch -> "Ouch!" clips (MiRo mics only)
   purr: true                    # pleased noises when stroked
   sleep_command: true           # "go to sleep" honoured
+  scene_context: true           # while talking, YOLO tells the LLM what the camera sees (as text)
   spontaneous_gestures: false   # react to hand gestures without being asked
   spotify: false                # optional song lookup (see cloud/music.py)
   log_transcripts: false        # print what users said (privacy: off by default)
@@ -76,6 +77,7 @@ hearing:
   salience_topic: host/mics     # what the "- mics" client localises (loudness still drives arousal)
   miro_channels: [0, 1]         # channels averaged for speech (0 = left ear, 1 = right ear)
   gain: 1.0
+  highpass_hz: 80               # remove wheel/motor rumble and hum below the voice band (0 = off)
   wake_words:
     - id: hey_miro
       file: assets/wakewords/Hey-Miro_en_linux_v3_0_0.ppn
@@ -174,6 +176,7 @@ scene:
   camera: caml
   yolo_weights: yolov10m.pt     # downloaded on first use into $HEYMIRO_CACHE_DIR/weights
   yolo_conf: 0.4
+  context_classes: []           # classes described to the LLM while talking ([] = all 80 COCO classes)
   gesture_model: assets/models/gesture_recognizer.task
   device: auto                  # auto | cpu | cuda
   undistort: false

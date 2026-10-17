@@ -666,3 +666,71 @@ class TestMixerAppend(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+
+# ------------------------------------------------- noise front-end, scene
+
+class TestHighPass(unittest.TestCase):
+
+	def tone(self, hz, n=16000, rate=16000):
+		return np.sin(2 * np.pi * hz * np.arange(n) / rate) * 10000.0
+
+	def rms(self, x):
+		return float(np.sqrt(np.mean(np.square(x[2000:]))))
+
+	def test_removes_rumble_keeps_voice(self):
+
+		hp = audio_util.HighPass(16000, 80.0)
+		self.assertLess(self.rms(hp.process(self.tone(25))) / self.rms(self.tone(25)), 0.15)
+		hp.reset()
+		self.assertGreater(self.rms(hp.process(self.tone(1000))) / self.rms(self.tone(1000)), 0.98)
+
+	def test_blocks_equal_whole_and_fallback_matches(self):
+
+		x = np.random.default_rng(0).standard_normal(5000) * 3000
+		whole = audio_util.HighPass(16000, 80.0).process(x)
+		hp = audio_util.HighPass(16000, 80.0)
+		parts = np.concatenate([hp.process(x[i:i + 512]) for i in range(0, 5000, 512)])
+		self.assertTrue(np.allclose(whole, parts, atol=1e-2))
+		slow = audio_util.HighPass(16000, 80.0)
+		slow._lfilter = None
+		self.assertTrue(np.allclose(whole, slow.process(x), atol=1e-2))
+
+
+class TestSceneContext(unittest.TestCase):
+
+	def msg(self, objects, confirmed):
+		return {"t": 0, "camera": "caml", "objects": objects, "confirmed": confirmed}
+
+	def test_describe(self):
+
+		from forebrain.scene_context import describe_scene
+		m = self.msg([
+			{"label": "person", "score": 0.9, "box": [0.4, 0.1, 0.6, 0.9]},
+			{"label": "cup", "score": 0.7, "box": [0.05, 0.6, 0.15, 0.8]},
+			{"label": "cell phone", "score": 0.5, "box": [0.8, 0.5, 0.9, 0.6]},
+			{"label": "dog", "score": 0.6, "box": [0.4, 0.4, 0.5, 0.5]},     # not confirmed
+		], ["person", "cup", "cell phone"])
+		text = describe_scene((100.0, m), now=101.0)
+		self.assertEqual(text, "Your camera sees: a person in front of you, a cup on your left, a cell phone on your right.")
+		self.assertIsNone(describe_scene((100.0, m), now=110.0))            # stale
+		self.assertIsNone(describe_scene((100.0, self.msg([], [])), now=100.5))
+		self.assertIsNone(describe_scene(None))
+		two = self.msg([{"label": "person", "score": 0.9, "box": [0.1, 0.1, 0.3, 0.9]},
+			{"label": "person", "score": 0.8, "box": [0.6, 0.1, 0.8, 0.9]}], ["person"])
+		self.assertEqual(describe_scene((1.0, two), now=1.0), "Your camera sees: two people.")
+		big = self.msg([{"label": "apple", "score": 0.8, "box": [0.0, 0.0, 0.3, 1.0]}], ["apple"])
+		self.assertEqual(describe_scene((1.0, big), now=1.0), "Your camera sees: an apple right on your left.")
+
+	def test_scene_mode_and_runner(self):
+
+		import node_scene
+		self.assertEqual(node_scene.mode_wants("context"), (False, True))
+		clients = StreamClients(stream_json(emotion="happy", valence=0.8, arousal=0.7, actions=[],
+			reply="I see you!"))
+		runner = dlg.TurnRunner(clients, StreamTts(), llm.ChatMemory(2), "SYS", Cfg({}), stream=True,
+			response_format={"type": "json_schema"}, context_in_user=True)
+		runner(np.zeros(16000, dtype=np.int16), 0.5, 0.5, "now", queue.Queue(),
+			scene="Your camera sees: a person in front of you.")
+		self.assertIn("Your camera sees: a person in front of you.", clients.messages[-1]["content"])

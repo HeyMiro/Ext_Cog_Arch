@@ -19,6 +19,7 @@ Every behaviour competes through MiRo's basal-ganglia action selection and modul
 | `cloud` (HRI '25) | Picovoice Porcupine + Cobra | OpenAI Whisper | GPT-4o | ElevenLabs | API keys |
 
 **To run it:** [Gazebo simulator guide](docs/RUN_SIMULATOR.md) · [real robot guide](docs/RUN_ROBOT.md).
+**How it works** (models, noise handling, VAD, YOLO scene context, benchmarks): [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 The local pipeline streams the reply, so MiRo starts speaking while the rest is still being generated. See
 [docs/local_ai.md](docs/local_ai.md) for the design, the models and measured latency. A comparison with the original

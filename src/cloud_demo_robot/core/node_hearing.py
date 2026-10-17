@@ -117,6 +117,9 @@ class NodeHearing(node.Node):
 
 		# DSP
 		self.resampler = audio_util.StreamResampler(audio_util.MIC_RATE, audio_util.HEARING_RATE)
+		# wheel / motor rumble and room hum below the voice band (0 = off)
+		hp = float(cfg.get("highpass_hz", 0.0) or 0.0)
+		self.highpass = audio_util.HighPass(audio_util.HEARING_RATE, hp) if hp > 0.0 else None
 		self.chunker = audio_util.FrameChunker(audio_util.HEARING_FRAME)
 
 		# control (set from the tick, read by the worker)
@@ -326,7 +329,10 @@ class NodeHearing(node.Node):
 				self._post("touch", hit)
 
 		mono = audio_util.mix_channels(frame, self.channels) * self.gain
-		pcm = audio_util.to_int16(self.resampler.process(mono))
+		x = self.resampler.process(mono)
+		if self.highpass is not None:
+			x = self.highpass.process(x)
+		pcm = audio_util.to_int16(x)
 		self.level_dbfs = audio_util.level_dbfs(pcm)
 
 		for f in self.chunker.push(pcm):

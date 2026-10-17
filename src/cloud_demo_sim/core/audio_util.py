@@ -187,6 +187,58 @@ def resample(x, rate_in, rate_out):
 
 
 
+class HighPass(object):
+
+	"""
+	Stateful 2nd-order Butterworth high-pass (RBJ biquad), one channel.
+	Removes the low rumble MiRo's wheels, motors and body make (and room
+	hum) below the voice band before VAD and speech-to-text; speech
+	energy starts around 100 Hz (fundamental) and its intelligibility
+	lives far above, so cutoff_hz ~80 costs nothing. State is carried
+	between calls, so block-by-block equals all-at-once.
+	"""
+
+	def __init__(self, rate, cutoff_hz=80.0, q=0.7071):
+
+		w0 = 2.0 * np.pi * float(cutoff_hz) / float(rate)
+		alpha = np.sin(w0) / (2.0 * q)
+		c = np.cos(w0)
+		a0 = 1.0 + alpha
+		self.b = np.array([(1.0 + c) / 2.0, -(1.0 + c), (1.0 + c) / 2.0]) / a0
+		self.a = np.array([1.0, -2.0 * c / a0, (1.0 - alpha) / a0])
+		try:
+			from scipy.signal import lfilter
+			self._lfilter = lfilter
+		except ImportError:
+			self._lfilter = None
+		self.reset()
+
+	def reset(self):
+
+		self._zi = np.zeros(2)
+
+	def process(self, x):
+
+		x = np.asarray(x, dtype=np.float64).reshape(-1)
+		if self._lfilter is not None:
+			y, self._zi = self._lfilter(self.b, self.a, x, zi=self._zi)
+			return y.astype(np.float32)
+		# direct form II transposed, plain numpy (no scipy)
+		b0, b1, b2 = self.b
+		a1, a2 = self.a[1], self.a[2]
+		z1, z2 = self._zi
+		y = np.empty_like(x)
+		for i in range(x.size):
+			xi = x[i]
+			yi = b0 * xi + z1
+			z1 = b1 * xi - a1 * yi + z2
+			z2 = b2 * xi - a2 * yi
+			y[i] = yi
+		self._zi = np.array([z1, z2])
+		return y.astype(np.float32)
+
+
+
 class FrameChunker(object):
 
 	"""
