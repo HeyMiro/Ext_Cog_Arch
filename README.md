@@ -95,6 +95,9 @@ tests/                     unit tests (no ROS needed)
 
 ## Install Docker and get the code
 
+> **New to this? Follow [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).** It is a step-by-step guide with every
+> command to copy and paste, what each one does, and what you should see.
+
 1. Install Docker on your Ubuntu machine: https://docs.docker.com/engine/install/ubuntu/
 2. Recommended: run Docker without sudo (https://docs.docker.com/engine/install/linux-postinstall/). `run_docker.bash` also works under sudo; it then uses your own secrets file and sound server.
 3. Optional, if your machine has an NVIDIA GPU (YOLO runs faster on it): install the NVIDIA driver and the
@@ -109,10 +112,12 @@ tests/                     unit tests (no ROS needed)
    cd Ext_Cog_Arch
    ```
 
-6. Get the environment image. CI builds it from [`docker/Dockerfile`](docker/Dockerfile):
+6. Get the environment image. CI builds it from [`docker/Dockerfile`](docker/Dockerfile), one per branch
+   (`ghcr.io/heymiro/ext_cog_arch:<branch>`, with `/` replaced by `-`; `:latest` for `main`). `run_docker.bash`
+   picks the one for the branch you have checked out:
 
    ```bash
-   docker pull ghcr.io/heymiro/ext_cog_arch:latest
+   ./docker/run_docker.bash --pull
    ```
 
    If the package is private, log in first with a GitHub token that has `read:packages`:
@@ -122,7 +127,7 @@ tests/                     unit tests (no ROS needed)
 ## Local AI services (default provider)
 
 ```bash
-sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker   # once
+docker run --rm --gpus all ubuntu nvidia-smi   # check the GPU is visible (if not: GETTING_STARTED 3.6)
 docker/local-ai/download_models.bash          # once, ~5 GB (pinned, ungated Hugging Face models)
 docker/run_docker.bash --sim --local-ai       # starts the services, then the container
 ```

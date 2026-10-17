@@ -23,13 +23,15 @@
 #   --host-ip IP|auto    this computer's IP as seen by the robot (default auto)
 #   --robot-name NAME    MiRo robot name (default miro)
 #   --gpu auto|on|off    pass the NVIDIA GPU through (default auto)
-#   --image IMAGE        default ghcr.io/heymiro/ext_cog_arch:latest
+#   --image IMAGE        default: the image CI built for this git branch
+#                        (ghcr.io/heymiro/ext_cog_arch:<branch>), else :latest
 #   --name NAME          container name (default heymiro)
 #   --secrets FILE       secrets file (default ~/.config/heymiro/secrets.env)
 #   --no-audio           do not pass the host sound server / devices
 #   --no-x11             do not pass the X display (no Gazebo GUI)
 #   --privileged         run privileged (normally not needed)
 #   --local-ai [9b]      start the local AI services first (docker/local-ai/up.bash)
+#   --pull               download the newest environment image, then exit
 #   -- CMD ...           command to run instead of an interactive bash
 
 set -e
@@ -51,13 +53,14 @@ ROBOT_IP=""
 HOST_IP="auto"
 ROBOT_NAME="miro"
 GPU="auto"
-IMAGE="ghcr.io/heymiro/ext_cog_arch:latest"
+IMAGE=""
 NAME="heymiro"
 SECRETS="$USER_HOME/.config/heymiro/secrets.env"
 AUDIO=1
 X11=1
 PRIVILEGED=0
 LOCAL_AI=""
+PULL=0
 CMD=(bash)
 
 usage() {
@@ -77,6 +80,7 @@ while [ $# -gt 0 ]; do
 		--no-audio) AUDIO=0; shift ;;
 		--no-x11) X11=0; shift ;;
 		--privileged) PRIVILEGED=1; shift ;;
+		--pull) PULL=1; shift ;;
 		--local-ai)
 			LOCAL_AI="default"; shift
 			if [ "$1" = "9b" ]; then LOCAL_AI="9b"; shift; fi ;;
@@ -93,6 +97,27 @@ if [ -n "$LOCAL_AI" ]; then
 	else
 		"$REPO_ROOT/docker/local-ai/up.bash"
 	fi
+fi
+
+# --- which environment image ----------------------------------------------------------------
+# CI publishes one per branch (slashes become dashes); prefer the one for
+# the branch checked out here, so the code and its environment match
+if [ -z "$IMAGE" ]; then
+	REPO_IMAGE="ghcr.io/heymiro/ext_cog_arch"
+	IMAGE="$REPO_IMAGE:latest"
+	branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null | tr '/' '-')"
+	if [ -n "$branch" ] && [ "$branch" != "main" ]; then
+		if docker image inspect "$REPO_IMAGE:$branch" >/dev/null 2>&1 || \
+			docker manifest inspect "$REPO_IMAGE:$branch" >/dev/null 2>&1; then
+			IMAGE="$REPO_IMAGE:$branch"
+		fi
+	fi
+fi
+
+if [ "$PULL" = 1 ]; then
+	echo "downloading the newest $IMAGE ..."
+	docker pull "$IMAGE"
+	exit $?
 fi
 
 # docker -v needs an absolute path (a relative one names a volume instead)
@@ -186,7 +211,7 @@ fi
 if [ "$GPU" = "on" ]; then
 	ARGS+=(--gpus all)
 elif [ "$GPU" = "auto" ]; then
-	if docker info 2>/dev/null | grep -qi 'runtimes:.*nvidia' || command -v nvidia-container-cli >/dev/null 2>&1; then
+	if docker info 2>/dev/null | grep -qiE 'runtimes:.*nvidia|nvidia\.com\/gpu' || command -v nvidia-container-cli >/dev/null 2>&1; then
 		ARGS+=(--gpus all)
 	fi
 fi
