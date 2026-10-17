@@ -153,7 +153,8 @@ def make_cloud_services(heymiro):
 			"top_p": float(cfg.get("ai.local.top_p", 0.8)),
 		}
 		cloud.stream = bool(cfg.get("ai.local.stream", True))
-		check_local_services(heymiro)
+		if check_local_services(heymiro) and cloud.clients is not None:
+			warm_prompt_cache(cloud, cfg)
 
 	if features.get("tts", False):
 		try:
@@ -183,14 +184,39 @@ def check_local_services(heymiro, timeout_s=2.0):
 		import requests
 	except ImportError:
 		return
+	all_ok = True
 	for name, route in (("llm", heymiro.route("llm")), ("speech", heymiro.route("stt"))):
 		base = route.base_url[:-3] if route.base_url.endswith("/v1") else route.base_url
 		try:
 			ok = requests.get(base + "/health", timeout=timeout_s).status_code == 200
 		except Exception:
 			ok = False
+		all_ok = all_ok and ok
 		print("[forebrain] local " + name + " service " + ("ready" if ok else
 			"NOT reachable at " + base + " (start it: docker/local-ai/up.bash)"))
+	return all_ok
+
+
+def warm_prompt_cache(cloud, cfg):
+
+	# the system prompt and the examples are the same in every turn: have
+	# the LLM process them now (in the background), so the first question
+	# is answered as fast as the later ones
+	import threading
+
+	def warm():
+		t0 = time.monotonic()
+		messages = [{"role": "system", "content": cloud.persona}] + list(cloud.examples) + \
+			[{"role": "user", "content": "Hi!"}]
+		try:
+			cloud.clients.chat(messages, cfg.get("llm.model", "heymiro"), max_tokens=1)
+			print("[forebrain] LLM prompt cache warmed (%.1f s)" % (time.monotonic() - t0))
+		except Exception as e:
+			print("[forebrain] LLM warm-up failed (" + describe_error(e) + ")")
+
+	t = threading.Thread(target=warm, name="llm-warmup")
+	t.daemon = True
+	t.start()
 
 
 
