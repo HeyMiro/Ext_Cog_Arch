@@ -1,5 +1,8 @@
 # Local AI pipeline (`ai.provider: local`)
 
+> Stage-by-stage internals and benchmarks (VAD, wake words, end of turn, speech-to-text, LLM, TTS, YOLO, scene
+> context) are in [TECHNICAL.md](TECHNICAL.md).
+
 Everything the HRI '25 demo did in the cloud now runs on this computer's NVIDIA GPU:
 
 - wake words;
@@ -159,7 +162,7 @@ free text, so the cloud provider benefits too.
 | `ai.local.wake_word` | `asr` | `asr` (local Whisper) or `porcupine` (needs a Picovoice key) |
 | `ai.local.vad` | `silero` | `silero`, `energy` or `cobra` |
 | `ai.local.end_of_turn` | `smart_turn` | `smart_turn` or `silence` (fixed `hearing.end_silence_s`, the paper's behaviour) |
-| `ai.local.turn_threshold`, `turn_min_silence_s`, `end_silence_s` | 0.5, 0.3, 1.2 | smart-turn decision threshold, first check, longest wait |
+| `ai.local.turn_threshold`, `turn_min_silence_s`, `end_silence_s` | 0.9, 0.3, 1.2 | smart-turn decision threshold, first check, longest wait |
 | `ai.local.voice`, `pitch`, `speed` | `af_heart`, 1.15, 1.05 | MiRo's Kokoro voice |
 | `ai.local.impression_voice`, `impression_pitch` | `af_sky`, 1.45 | the Mickey Mouse impression |
 | `ai.local.settings` | `llm.model: heymiro`, … | replaces the cloud `llm` / `stt` settings when local |

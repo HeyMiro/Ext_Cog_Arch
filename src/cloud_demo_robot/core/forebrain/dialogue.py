@@ -139,7 +139,7 @@ class TurnRunner(object):
 		self.json_mode = bool(cfg.get("llm.json_mode", True))
 		self.impression_voice_id = cfg.get("tts.impression_voice_id", None)
 
-	def __call__(self, pcm16k, valence=None, arousal=None, now_str=None, progress=None):
+	def __call__(self, pcm16k, valence=None, arousal=None, now_str=None, progress=None, scene=None):
 
 		if self.clients is None:
 			raise RuntimeError("conversation is not configured (no OpenAI route)")
@@ -155,7 +155,8 @@ class TurnRunner(object):
 			return TurnResult(transcript="")
 
 		# chat (the context message is ephemeral: never stored)
-		context = context_message(valence, arousal, now_str)
+		# scene: what the camera sees, as one sentence (forebrain/scene_context.py)
+		context = context_message(valence, arousal, now_str, extra=scene)
 		messages = self.memory.messages(self.system_prompt, context, text, self.examples, self.context_in_user)
 		if self.stream and progress is not None:
 			return self._streamed(text, messages, progress)

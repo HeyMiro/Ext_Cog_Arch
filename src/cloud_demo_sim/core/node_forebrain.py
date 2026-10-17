@@ -679,6 +679,10 @@ class NodeForebrain(node.Node):
 			return "objects"
 		if self._feature("spontaneous_gestures") and self._feature("tricks") and not self.engaged():
 			return "gestures"
+		# while talking: YOLO describes the scene to the LLM (as text)
+		dialogue = self._node("dialogue")
+		if self._feature("scene_context") and dialogue is not None and dialogue.engaged():
+			return "context"
 		return "off"
 
 	def compute_cue_mode(self):
