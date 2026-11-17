@@ -1,11 +1,12 @@
 # syntax=docker/dockerfile:1.7
 #
-# Hey MiRo - runtime ENVIRONMENT for the cloud demo (no project code inside).
+# Hey MiRo - runtime ENVIRONMENT for the demo (no project code inside).
 #
 # ROS Noetic (Ubuntu 20.04, Python 3.8) + Gazebo 11 + MiRo MDK 2-230105 + the
-# Python packages used by src/cloud_demo_robot and src/cloud_demo_sim. The two
-# project folders are bind-mounted at run time by docker/run_docker.bash, so
-# code changes come from git, never from `docker commit`.
+# Python packages used by src/heymiro. The project folder is bind-mounted at
+# run time by docker/run_docker.bash, so code changes come from git, never
+# from `docker commit`. The local AI models (offline pipeline) run in their
+# own containers: docker/local-ai.
 #
 # Build (from the repository root; .dockerignore only lets docker/ in):
 #   docker/build_image.bash                    # or:
@@ -137,7 +138,7 @@ RUN chmod +x /opt/heymiro/*.sh && \
 	mkdir -p /root/mdk/catkin_ws/src /root/.cache/heymiro
 
 LABEL org.opencontainers.image.source="https://github.com/HeyMiro/Ext_Cog_Arch" \
-	org.opencontainers.image.description="Hey MiRo environment: ROS Noetic + MiRo MDK + cloud demo dependencies (code is bind-mounted)" \
+	org.opencontainers.image.description="Hey MiRo environment: ROS Noetic + MiRo MDK + Hey MiRo demo dependencies (code is bind-mounted)" \
 	org.opencontainers.image.licenses="NOASSERTION"
 
 WORKDIR /root/mdk/catkin_ws/src

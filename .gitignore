@@ -2,6 +2,8 @@
 # keep your real secrets in ~/.config/heymiro/secrets.env (see README)
 *.env
 !*.env.example
+# pinned model revisions (no secrets)
+!docker/local-ai/models.env
 **/api_key/
 api_key*.txt
 **/heymiro.local.yaml
@@ -14,6 +16,8 @@ __pycache__/
 **/recordings/
 **/logs/
 *.log
+# ultralytics output
+**/runs/
 
 # --- docker build inputs ------------------------------------------------------
 docker/mdk/*.tgz

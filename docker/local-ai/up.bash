@@ -7,7 +7,7 @@
 #   docker/local-ai/up.bash --down     # stop them
 #
 # First time: docker/local-ai/download_models.bash [--9b]
-# Then run the demo with ai.provider: local (the default in config/heymiro.yaml).
+# Then run the demo offline: run.sh --offline (ai.provider: local is the default).
 
 set -e
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,7 +30,7 @@ fi
 # a GPU is usable via the nvidia runtime (older Docker) or CDI (Docker 25+)
 if ! docker info 2>/dev/null | grep -qiE 'runtimes:.*nvidia|nvidia\.com\/gpu'; then
 	echo "WARNING: Docker cannot use an NVIDIA GPU, so the AI runs on the CPU (about 15 s per answer"
-	echo "         instead of about 1 s). To use the GPU, see \"If something goes wrong\" in docs/RUN_SIMULATOR.md."
+	echo "         instead of about 1 s). To use the GPU, see \"Troubleshooting\" in the README."
 	COMPOSE+=(-f "$HERE/compose.cpu.yaml")
 fi
 

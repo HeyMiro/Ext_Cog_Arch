@@ -1,9 +1,9 @@
 # Hey MiRo: technical documentation
 
 How the local conversation and scene-awareness pipeline is built, which models it uses and why, how each stage
-works, and how fast and accurate each stage is (all numbers measured). The how-to-run guides are
-[RUN_SIMULATOR.md](RUN_SIMULATOR.md) and [RUN_ROBOT.md](RUN_ROBOT.md). The design of the local services is in
-[local_ai.md](local_ai.md), and the comparison with the HRI '25 code is in [hri25_parity.md](hri25_parity.md).
+works, and how fast and accurate each stage is (all numbers measured). How to set up and run it (offline or
+online, simulator or robot) is in the [README](../README.md). The comparison with the original HRI '25 code is in
+[section 19](#19-parity-with-the-hri-25-demo-the-online-pipeline).
 
 **Contents**
 
@@ -21,6 +21,11 @@ works, and how fast and accurate each stage is (all numbers measured). The how-t
 12. [How it fits MiRo's brain-inspired architecture](#12-how-it-fits-miros-brain-inspired-architecture)
 13. [GPU memory](#13-gpu-memory)
 14. [Benchmarks: method, reproduction and caveats](#14-benchmarks-method-reproduction-and-caveats)
+15. [Models and licences](#15-models-and-licences)
+16. [Prompt and tool-call design](#16-prompt-and-tool-call-design)
+17. [Measured results](#17-measured-results)
+18. [MiRo's architecture, processes and threads](#18-miros-architecture-processes-and-threads)
+19. [Parity with the HRI '25 demo (the online pipeline)](#19-parity-with-the-hri-25-demo-the-online-pipeline)
 
 ---
 
@@ -123,12 +128,12 @@ RNNoise, DeepFilterNet) improve how speech *sounds*, but they add artefacts that
 - **The real problem is other voices** (babble): no front-end filter can tell the person talking to MiRo from the
   person behind them. The system copes in four ways:
   1. **wake words**, so MiRo only listens when addressed;
-  2. **a close microphone**, `./run_robot.sh --ext-mic` with a directional or USB microphone near the speaker, as at
+  2. **a close microphone**, `./run.sh --robot --ext-mic` with a directional or USB microphone near the speaker, as at
      the HRI '25 demo;
   3. **Whisper's own no-speech probability**, which rejects segments that are not clear speech;
   4. **conversation timeouts**, so MiRo stops listening when nobody addresses it.
 
-  In the simulator, headphones (or PulseAudio's `module-echo-cancel`, see [simulation.md](simulation.md)) stop MiRo
+  In the simulator, headphones (or PulseAudio's `module-echo-cancel` on the host, with its source passed as `run.sh --device`) stop MiRo
   hearing its own voice.
 
 ---
@@ -433,7 +438,7 @@ speech recognition):
 
 The usual misses are borderline cases. For example, "I'm so tired, I want to sleep" made MiRo nap too. Before the
 negative examples and the "talking about it is not a request" rule, 4B scored 36/40 with three false triggers. 9B is
-not more accurate here, only slower, so 4B is the default (`--local-ai 9b` on the robot for richer chat).
+not more accurate here, only slower, so 4B is the default (`docker/run_docker.bash --robot-ip IP --offline 9b` on the robot for richer chat).
 
 ---
 
@@ -680,7 +685,7 @@ the pinned revisions in `docker/local-ai/models.env`.
 ```bash
 python3 tools/bench_pipeline.py --images <folder of photos> --weights yolov10m.pt,yolov10n.pt --json bench.json
 python3 tools/eval_dialogue.py --json eval.json
-python3 tools/fake_user.py --log run.json          # with ./run_sim.sh --no-bridge running
+python3 tools/fake_user.py --log run.json          # with ./run.sh --sim --no-bridge running
 ```
 
 **How the audio tests are made:**
@@ -703,3 +708,402 @@ python3 tools/fake_user.py --log run.json          # with ./run_sim.sh --no-brid
 - **Small samples.** 10 sentences, 40 dialogue cases and two photos are small. Treat differences of one or two cases
   as noise.
 - **What is still missing:** an evaluation with recordings of real users, on the robot, in a noisy room.
+
+---
+
+## 15. Models and licences
+
+All the models are ungated on Hugging Face (no login, no licence click-through) and pinned to a revision in
+`docker/local-ai/models.env`.
+
+| Job | Model | Licence | Size | Runs on |
+|---|---|---|---|---|
+| LLM (default) | `unsloth/Qwen3.5-4B-GGUF` Q4_K_M + mmproj (vision) | Apache-2.0 | 3.4 GB | GPU |
+| LLM (quality profile, `--9b`) | `unsloth/Qwen3.5-9B-GGUF` Q4_K_M + mmproj | Apache-2.0 | 6.6 GB | GPU |
+| Speech-to-text | `deepdml/faster-whisper-large-v3-turbo-ct2` (int8_float16) | MIT | 1.6 GB | GPU |
+| Text-to-speech | `hexgrad/Kokoro-82M` | Apache-2.0 | 0.3 GB | GPU |
+| End of turn | `pipecat-ai/smart-turn-v3` v3.2 (int8 ONNX) | BSD-2-Clause | 9 MB | CPU |
+| Voice activity | Silero VAD v5 (pip `silero-vad`, model file only) | MIT | 2 MB | CPU (robot container) |
+
+**Why 4B by default:** measured on the RTX 4070 Ti with `tools/eval_dialogue.py`, 9B picked the right action no more
+often than 4B (38/40 each, F1 0.96 against 0.95). It was slower, though: 0.69 s against 0.44 s to the first sentence.
+It also needs 9.5 GB instead of 7 GB with the speech models loaded, which is too much alongside Gazebo. It fits on the
+robot (no Gazebo on the GPU): `docker/run_docker.bash --robot-ip IP --offline 9b`.
+
+**MiRo's voice:** the paper chose a higher-pitched voice to suit MiRo's size. Kokoro's `af_heart` is synthesized
+slower and resampled faster (`ai.local.pitch: 1.15`), which raises the pitch without changing the speed. The Mickey
+Mouse impression uses `af_sky` at pitch 1.45.
+
+### What is faster than the HRI '25 pipeline, and why
+
+From the moment the user stops talking until MiRo starts to answer:
+
+| Step | HRI '25 (cloud) | Local |
+|---|---|---|
+| Decide the user has finished | fixed ~3 s of silence | smart-turn: from 0.3 s of silence (at most `ai.local.end_silence_s` = 1.2 s) |
+| Speech-to-text | upload + Whisper API | Whisper turbo on the GPU |
+| LLM | the whole reply, then parse | streamed; the body reacts after ~25 tokens (emotion and actions come first) |
+| Text-to-speech | the whole reply, then play | the first sentence plays while the rest is generated |
+
+Measured numbers are in [section 17](#17-measured-results).
+
+### Offline settings (`config/heymiro.yaml`, `ai:`)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `ai.provider` | `local` | `local` or `cloud` |
+| `ai.local.llm_url`, `speech_url` | `http://127.0.0.1:8080/v1`, `:8090/v1` | where the services are (`HEYMIRO_LLM_BASE_URL` / `HEYMIRO_STT_BASE_URL` override them) |
+| `ai.local.stream` | true | speak the first sentence while the rest is generated |
+| `ai.local.structured_output` | true | send the JSON Schema (grammar-constrained replies) |
+| `ai.local.wake_word` | `asr` | `asr` (local Whisper) or `porcupine` (needs a Picovoice key) |
+| `ai.local.vad` | `silero` | `silero`, `energy` or `cobra` |
+| `ai.local.end_of_turn` | `smart_turn` | `smart_turn` or `silence` (fixed `hearing.end_silence_s`, the paper's behaviour) |
+| `ai.local.turn_threshold`, `turn_min_silence_s`, `end_silence_s` | 0.9, 0.3, 1.2 | smart-turn decision threshold, first check, longest wait |
+| `ai.local.voice`, `pitch`, `speed` | `af_heart`, 1.15, 1.05 | MiRo's Kokoro voice |
+| `ai.local.impression_voice`, `impression_pitch` | `af_sky`, 1.45 | the Mickey Mouse impression |
+| `ai.local.settings` | `llm.model: heymiro`, … | replaces the cloud `llm` / `stt` settings when local |
+
+---
+
+## 16. Prompt and tool-call design
+
+The LLM's job each turn is to say something *and* to decide what MiRo's body should do. Small local models get this
+wrong more easily than GPT-4o, so the design takes the guesswork away:
+
+1. **One registry of actions** (`core/cloud/tools.py`): spin, move_ears, impression, sleep, dance(song), tricks
+   and identify_object. Each has a description, *when to use it* and *when not to*. The registry generates:
+   - the reply's JSON Schema;
+   - the "What you can do" section of the system prompt;
+   - the mapping onto the command flags the rest of the code already understands.
+
+   The prompt, the schema and the code cannot drift apart.
+2. **Grammar-constrained output.** The schema is sent as `response_format: json_schema`, and llama.cpp compiles it
+   into a grammar, so the model *cannot* produce anything else:
+   - one of the six emotions;
+   - valence and arousal in [0, 1];
+   - at most two known actions;
+   - for dance, a song from `config/songs.yaml` or `"any"`, so it cannot pick a song that does not exist;
+   - a reply of at most 240 characters.
+3. **Field order chosen for latency.** The order is `emotion, valence, arousal, actions, reply`, so the pose, the
+   lights and the behaviour are decided before the first spoken word is generated.
+4. **Few-shot examples, including negative ones.** Six fixed example exchanges show the format. They include
+   "I love dancing too" and "Your ears are so cute!", which must **not** trigger an action. Small models over-trigger
+   tools, and these examples fixed most of that (see Results).
+5. **Prompt-cache-friendly layout.** The order is: system prompt → examples → history → `[context]` + user message.
+   Everything up to the history is identical every turn, so llama.cpp reuses its cache and only processes the new
+   message. The per-turn context (valence, arousal, time) goes *in front of the user's words* rather than in a second
+   system message. Qwen's chat template rejects a second system message, and putting the context there would also
+   break the cache.
+6. **Spoken-language rules.** The reply must be one or two short sentences, with no emoji, markdown or stage
+   directions. The model is also told that the words come from speech recognition and can be wrong, so it asks
+   again instead of guessing.
+7. **Sampling and server settings.** Qwen's non-thinking settings: temperature 0.7, top_p 0.8, top_k 20.
+   "Thinking" is off on the server (`--reasoning-budget 0`), since a pet robot should answer immediately.
+
+The same schema and prompt also work with GPT-4o, and the reply parser still accepts the HRI "Key: value" format and
+free text, so the cloud provider benefits too.
+
+---
+
+## 17. Measured results
+
+**Run 1: CPU only** (October 2026, 24-thread desktop CPU; Docker's GPU runtime not yet configured on the test
+machine). Everything ran locally, but without the GPU.
+
+`tools/eval_dialogue.py`, Qwen3.5-4B Q4_K_M, 40 cases:
+
+| Metric | Result |
+|---|---|
+| valid JSON | 40/40 |
+| keys in schema order | 40/40 |
+| actions exactly right (incl. the song) | 39/40 |
+| precision / recall / F1 | 0.96 / 1.00 / 0.98 |
+| reply length | mean 11.7 words, max 18; no emoji or stage directions |
+| latency (CPU) | header p50 2.7 s, first sentence p50 3.3 s |
+
+The one miss was "I'm so tired, I want to sleep": MiRo decided to nap too. Before the negative few-shot example and
+the "talking about it is not a request" rule, the score was 36/40 (F1 0.91), with three false triggers.
+
+`tools/fake_user.py` in Gazebo (wake → question → spin → "dance to Dancing Queen" → "Stop MiRo"):
+
+- Every step was understood and carried out, in three runs.
+- End of the user's words → MiRo's answer took about 18 s on the CPU at first, and about 14 s after two fixes:
+  - the busy wake-word check no longer transcribes whole sentences a second time;
+  - the LLM prompt cache is warmed at start-up.
+
+  The rest is Whisper (about 3.7 s) and LLM processing on a CPU that Gazebo also uses.
+- Wake word: about 5 s on the CPU.
+- The speech service alone (CPU): Kokoro synthesizes a sentence in 0.35–0.45 s, and smart-turn decides in about
+  17 ms.
+
+**Run 2: GPU (RTX 4070 Ti, 12 GB).** Same machine and models.
+
+| Step | CPU | GPU |
+|---|---|---|
+| Whisper large-v3-turbo, 3 s utterance | 3.7 s | 0.10 s |
+| Kokoro, one sentence | 0.4 s | 0.06 s |
+| LLM: time to header (emotion + actions) | 2.7 s | 0.37 s (p50) |
+| LLM: time to the first sentence | 3.3 s | 0.44 s (p50) |
+| LLM prompt-cache warm-up at start | 8–12 s | 0.5 s |
+
+`tools/eval_dialogue.py` on the GPU:
+
+- **Format:** 40/40 valid JSON, all in schema order.
+- **Actions:** 38/40 exact, F1 0.95.
+- **The two misses:** "I'm so tired, I want to sleep" → MiRo naps too; "What is this object?" → no object game.
+  Results vary by one or two cases between runs at temperature 0.7.
+
+`tools/fake_user.py` in Gazebo, measured from the moment the user's voice stops (this includes smart-turn deciding
+that they have finished):
+
+| User says | MiRo reacts | after |
+|---|---|---|
+| "Hey MiRo!" | greets | 0.38 s |
+| "Hi! What is your favourite band?" | starts answering | 0.91 s |
+| "Can you spin around for me?" | starts answering (and spins) | 1.20 s |
+| "Can you dance to Dancing Queen?" | starts dancing | 1.23 s |
+| "Stop MiRo!" | stops and says goodbye | 0.46 s |
+
+The HRI '25 demo waited a fixed 3 s of silence before it started transcribing, and the paper reports 0.5–5 s after
+that.
+
+**GPU memory** with Gazebo, the camera clients, YOLOv10m, Qwen3.5-4B + mmproj, Whisper and Kokoro all running:
+7.9 GB of 12 GB (the desktop included).
+
+**Docker and the GPU:** Docker 25+ exposes NVIDIA GPUs through CDI (`docker info` lists `nvidia.com/gpu=all`), and no
+`nvidia` runtime entry is needed. `up.bash` and `run_docker.bash` accept either. Without a usable GPU, `up.bash`
+starts the same services on the CPU (`compose.cpu.yaml`) with a warning.
+
+The numbers above were measured with the two-copy layout the code had in October 2026; the code paths are unchanged
+in `src/heymiro`. A re-run in November 2026 (RTX 4070 Ti, `ai.provider: local`, headless Gazebo) gave 40/40 valid
+JSON, F1 0.98 and 0.46 s to the first sentence (p50) in `tools/eval_dialogue.py`, and every `tools/fake_user.py`
+step understood, with MiRo reacting 0.5–1.8 s after the user's voice stopped.
+
+---
+
+## 18. MiRo's architecture, processes and threads
+
+### Background: MiRo's layered, brain-based control
+
+MiRo-e's control system follows Mitchinson & Prescott (2016), *MIRO: A robot "mammal" with a biomimetic
+brain-based control system*. Its control loops are **layered** like the vertebrate nervous system. Lower layers
+keep working on their own, and higher layers **modulate** them (suppress, potentiate, prime) rather than replace
+them.
+
+- **Spinal cord (P1)**
+  - Signal conditioning.
+  - Reflexes: the *cliff reflex* stops the wheels at an edge; the *freeze reflex* stops all movement when MiRo is
+    picked up.
+- **Brainstem (P2)**
+  - **Affect** as a circumplex of *valence* and *arousal*, driven by touch, sound, light and the time of day,
+    with a sleep oscillator.
+  - **Social pattern generators** (SPG): lights, ears, tail and eyelids express that affect.
+  - A **spatial behaviour system** (superior colliculus) builds a salience map from vision and from sound
+    localised with a Jeffress model. It generates plans: *orient*, *approach*, *flee*, *avert*.
+  - The **basal ganglia** (BG) pick one plan at a time, with persistence and pre-emption, for the **motor
+    pattern generator** (MPG).
+- **Forebrain (P3)**: higher systems that *modulate* the lower ones.
+- **P4**: off-board processing. It is slower but more capable.
+
+The stock MDK demo (`client_demo.py`) implements P1–P2 as a set of nodes (`node_lower`, `node_affect`,
+`node_express`, `node_spatial`, `node_detect_*`, `node_action` + `action/basal_ganglia.py`, `node_loop`) spread
+over several processes: the main client plus the `caml`, `camr` and `mics` clients.
+
+### What Hey MiRo adds (HRI '25)
+
+The HRI '25 paper (Fig. 2) adds **forebrain** components. In this code base they are new nodes and actions that
+plug into the stock architecture without replacing it, plus **P4** clients for cloud services.
+
+| Layer | Stock modules (unchanged unless noted) | Hey MiRo additions |
+|---|---|---|
+| Spinal cord (P1) | `node_lower` (touch, jerk, sound level); cliff and freeze reflex flags | `ActionAvert` (cliff aversion) restored |
+| Brainstem: affect | `node_affect` | `set_forebrain_target()` lets LLM replies, dancing and touch pull valence/arousal; `wake()` and `request_sleep()`; fixed `mood.arousal` clipping |
+| Brainstem: SPG | `node_express` | `override()` / `release()`: forebrain behaviours borrow lights, ears, tail or eyelids for a few ticks |
+| Brainstem: spatial | `node_spatial`, `node_detect_*`, Jeffress engine | the sound-localisation input topic is configurable (`host/mics` in sim) |
+| Brainstem: BG | `node_action`, `basal_ganglia.py` | four forebrain actions in a priority band of their own (below) |
+| Brainstem: MPG / loop | `node_loop`, kc | speech counts as vocalising for reafference gating |
+| **Forebrain: linguistic** | — | `node_hearing` (wake words, VAD, utterance capture, touch-noise), `node_dialogue` + `forebrain/dialogue.py` (conversation state machine), `node_voice` (clips, speech, music) |
+| **Forebrain: scene awareness** | — | `node_scene` in its own `- scene` client (YOLO objects, mediapipe gestures) |
+| **Forebrain: integration** | — | `node_forebrain` (events → intentions, top-down modulation), `node_cues` (attentional eyelid cues) |
+| **Forebrain: behaviours** | — | `action_converse`, `action_dance` (+ `choreography/`), `action_tricks`, `action_identify` |
+| **Off-board (P4)** | — | `cloud/llm.py` (Whisper and GPT through any OpenAI-compatible route), `cloud/tts.py` (ElevenLabs), `cloud/music.py` (song library, optional Spotify), `cloud/worker.py` |
+
+`core/heymiro_config.py` holds the settings, secrets and API routes.
+
+#### Processes
+
+| Client | Command | Does |
+|---|---|---|
+| main | `client_demo.py -` | affect, express, action selection, forebrain nodes, kinematics; 50 Hz, driven by `sensors/package` |
+| caml / camr | `client_demo.py - caml` / `- camr` | stock face, motion and AprilTag detection per camera |
+| mics | `client_demo.py - mics` | stock sound localisation (from `hearing.salience_topic`) |
+| scene | `client_demo.py - scene` | YOLO + mediapipe; subscribes to the camera only while main asks for it on `core/scene/mode` |
+| bridge (optional) | `tools/host_audio_bridge.py` | host microphone → `host/mics` (sim, or `--ext-mic` on the robot) |
+
+#### Threads in the main client
+
+The 50 Hz tick runs in the `sensors/package` callback. It must stay fast: no network calls, no model inference,
+no waiting.
+
+| Thread | Work |
+|---|---|
+| 50 Hz tick | All nodes' `tick()` and the actions. It only polls futures and queues. |
+| Mic callback | Puts frames on NodeHearing's queue. |
+| NodeHearing worker | Resampling 20 → 16 kHz, Porcupine, Cobra, the utterance segmenter, the touch-noise detector. |
+| CloudWorker (2 threads) | STT → LLM → parse → TTS for one turn; song lookup and mp3 decoding. |
+| Audio output stream (sounddevice) | Mixes the speech and music channels. |
+
+Results carry an *episode id*, so an answer that arrives after the conversation has moved on is discarded.
+
+### The conversation (HRI paper §II-B-1)
+
+```
+"Hey MiRo" (Porcupine)
+   │  node_forebrain → affect.wake(), dialogue.on_wake()
+   ▼
+FACING     turn until an AprilTag is in view (or to the last sound, or skip)
+GREETING   greeting clip ("What's up?") + lean in, look up, ears perk
+LISTENING  segmenter armed: speech onset (Cobra VAD) → nod; ends after ~3 s of silence
+THINKING   "Hmm" clip + loading tune; worker: wav → Whisper → GPT-4o (persona + current
+           valence/arousal + time, JSON reply) → ElevenLabs
+RESPONDING speak; emotion pose + LED colour; flourishes (spin, ear flapping, impression voice);
+           affect pulled to the reply's valence/arousal
+   └──► LISTENING …  no speech for ~3 s → GOODBYE clip → IDLE (MiRo resumes exploring)
+```
+
+The LLM is asked for a JSON object:
+
+```json
+{"valence": 0.8, "arousal": 0.7, "emotion": "happy", "reply": "...",
+ "commands": {"spin": false, "sleep": false, "move_ears": false, "impression": false,
+              "dance": false, "song": null, "tricks": false, "identify_object": false}}
+```
+
+A lenient parser also accepts the older HRI "Key: value" line format and plain text, so a model that ignores the
+format still works.
+
+- **Behaviour commands.** `dance`, `tricks` and `identify_object` hand over to a separate behaviour. The dialogue
+  is suspended and then resumes ("that was fun — want to keep talking?").
+- **`sleep`.** The affect node's sleep pressure is raised.
+- **Stop.** "Stop MiRo" ends whatever is happening.
+
+### Action selection
+
+`basal_ganglia.py` is unchanged: winner-take-all, +0.05 hysteresis for the running action, a little noise, and
+priorities clipped to [0, 1]. The forebrain actions use their own band:
+
+| Behaviour | Priority |
+|---|---|
+| mull (idle) | 0.1 |
+| orient / approach / flee | up to 0.8 (`priority_attend`) |
+| **converse / dance / tricks / identify** | **0.84 × surface confidence** (0.89 while running) |
+| halt (stall), avert (cliff), mull while touched | 0.9 – 1.0 |
+
+What this ordering gives:
+
+- A forebrain request pre-empts orienting and approaching.
+- A running forebrain behaviour is never interrupted by them.
+- Cliff aversion and halting still win at any time.
+- Nothing reaches the 1.0 clip, where actions would tie.
+
+The HRI version used 2 / 1.5 / 1.2. Those were all clipped to 1.0 and flapped against each other.
+
+Only one forebrain behaviour is wanted at a time. `node_forebrain` holds a single task slot, and the dialogue
+suspends while a task (dance, tricks, identify) runs.
+
+### Dancing (HRI paper §II-B-3)
+
+1. "Dance MiRo", or a dance request in conversation ("dance to Dancing Queen"), resolves a song from
+   `config/songs.yaml` (fuzzy match on title, artist and aliases; a random song otherwise).
+2. The song is decoded on the worker thread.
+3. `action_dance` plays an intro clip and the music, and steps a `choreography.DanceController` with the
+   **music playback position**. Head moves, wheel spins, ears and lights follow the beat (period 60/bpm).
+4. The dance stops when the song ends, after `dance.max_duration_s`, on "Stop MiRo", or when a protective
+   behaviour pre-empts it.
+5. While it runs, valence rises and arousal follows the tempo.
+
+Spotify's audio-analysis and preview endpoints are no longer available to new apps. The tempo of each bundled
+song is therefore measured offline with `tools/estimate_bpm.py` and stored in `songs.yaml`. A Spotify lookup can
+be switched on with `features.spotify`.
+
+### Scene awareness (HRI paper §II-B-2)
+
+The `- scene` client runs only while main requests it on `core/scene/mode`:
+
+- **Gestures** (mediapipe), during *tricks* (or always, if `features.spontaneous_gestures`):
+  - Open_Palm → greeting and nod
+  - Pointing_Up → spin
+  - Victory → ear wiggle
+  - ILoveYou → party lights
+- **Objects** (YOLO, 13 COCO classes), during the *identify* game: an object confirmed in 4 of 10 frames gets an
+  LLM one-liner.
+
+Touch on MiRo's body and head drives affect through the stock pathways. Scratching the ears or tail is detected
+from the noise it makes in MiRo's own microphones; it plays an "Ouch!" clip and pushes valence down. Stroking
+plays pleased noises.
+
+---
+
+## 19. Parity with the HRI '25 demo (the online pipeline)
+
+This compares three things for every behaviour:
+
+- **the paper**: Htet et al., *Hey Miro!*, HRI '25, §II-B and §III;
+- **the original demo code**: the `New_Miro_Demo` folder inside the Docker image `aung9htet/ros_miro:public`
+  (2025-03-31, last commit `523170c`);
+- **this repository**: `src/heymiro`, with `ai.provider: cloud` (the HRI services)
+  and `ai.provider: local` (the offline pipeline).
+
+It was checked in October 2026 by:
+
+- reading the original code;
+- running the unit tests (291 passed in each of the two copies the code had then);
+- running the environment smoke test;
+- running both providers end to end in the Gazebo simulator.
+
+"Intended change" means the refactor does something on purpose that differs from the original. **Regression**
+means something the original did that the refactor broke. One regression was found, and it is fixed.
+
+### Regression found and fixed
+
+| What | Effect | Fix |
+|---|---|---|
+| `client_demo.py` read `sensors/package.flags` as an int. It is a `std_msgs/UInt32` message. | `TypeError` on **every** 50 Hz tick, robot and sim: the whole brain (stock behaviours *and* the forebrain) never ran. The unit tests did not catch it because they do not build a real ROS message. | `msg.flags.data` (commit `6863112`). With the fix, orient/approach/flee/mull and every forebrain command were checked in Gazebo. |
+
+### Behaviour by behaviour
+
+| Behaviour (paper) | Original code | This repository | Status |
+|---|---|---|---|
+| **"Hey MiRo" wake word** (§II-B-1, Porcupine) | `node_detect_word`: Porcupine with `Hey-Miro_en_linux_v3_0_0.ppn`. Only "Hey MiRo" was active. | cloud: Porcupine with the same `.ppn` files, plus "Dance MiRo" and "Stop MiRo". local: the phrase is recognised by local Whisper (no key needed). | Same; extended |
+| **Attention on wake**: lean in, head tilt, nod (§II-B-1) | `action_llm`: `look_up` → greeting clip → `lean_forward`; random nods while listening | `action_converse`: FACING (AprilTag) → GREETING (same clips) → lean in, look up, ears perk; a nod on each speech onset | Same |
+| **Record until ~3 s of silence** (Cobra VAD) | `silence_count` of 32 ms blocks; Cobra re-run on the whole recording; ends at 80 blocks ≈ 2.6 s | cloud: Cobra per 32 ms frame, `end_silence_s: 3.0`. local: Silero VAD, then smart-turn ends the turn once the speaker has finished (0.3–1.2 s) | Same (cloud); faster (local) |
+| **Whisper transcription** | `openai.Audio.transcribe("whisper-1")`, blocking inside the 50 Hz tick | cloud: whisper-1 on a worker thread. local: Whisper large-v3-turbo | Same; no longer blocks the robot |
+| **GPT-4o with persona, emotion state, time** | One long prompt: valence/arousal plus time as extra system messages each turn. Fixed "Key: value" reply lines, parsed by line number. | cloud: GPT-4o with the same persona (`config/persona.md`), the same emotion table and the same flags, in JSON. The old line format is still parsed. local: Qwen3.5 with a JSON-schema-constrained reply | Same content; robust parser |
+| **ElevenLabs voice** (higher pitched) | voice `vy5FHcwTzRxpcxreOntL`, impression `dfZGXKiIzjizWtJ0NgPy` | cloud: `tts.voice_id: 0m2tDjDewtOfXrhxqgrJ`, `impression_voice_id: dfZGXKiIzjizWtJ0NgPy`. local: Kokoro `af_heart` with pitch ×1.15 | **Check:** MiRo's voice id differs from the March 2025 image. If the HRI demo used `vy5F…`, set it in `config/heymiro.yaml`. |
+| **Pre-recorded clips** (hums, cries, greetings, goodbyes) | `miro_clips_HD/*` | the same files in `assets/clips/`, listed in `config/clips.yaml` | Same |
+| **"Hmm" + music while waiting** (§III) | `hmm_thinking`, then the `loading` tune | the same clips. local: only played when the reply is not ready yet | Same |
+| **Repeat until no voice for 3 s**, then explore | `silence_count >= 80` with no voice → goodbye clip, history reset | `no_speech_timeout_s: 3.0` → GOODBYE clip → IDLE; memory cleared | Same |
+| **Spin** | spins at 0.4 rad/s while speaking | spins at 0.4 rad/s for `converse.spin_s` (3 s) | Same speed; time-bounded |
+| **Move ears** | 10 flaps at 2 Hz | 10 flaps at 2 Hz | Same |
+| **Mickey Mouse impression** | prefixes "Hot Diggity Dog H-Hey everybody! It's me, Mickey Mouse! …" and switches voice | The prompt asks the model to write the reply as Mickey would say it, plus the impression voice. The fixed prefix is gone. | **Intended change.** Put the prefix back in `cloud/llm.py` if you want it word for word. |
+| **Emotion → lights and pose** | happy: green + light_up; sad: blue + look down; angry: red + look down | the same colours and poses; worried and scared added (orange, purple) | Same; extended |
+| **Emotion → affect** | `drive_by_response()` raised valence for happy **and** for sad and angry (same gain) | the reply's valence/arousal becomes the affect target (`set_forebrain_target`) | **Intended fix** (sad/angry no longer cheer MiRo up) |
+| **Go to sleep** | flag parsed, never used | `affect.request_sleep()` after the goodbye | **Intended fix** |
+| **Dance to music on request** (§II-B-3, Spotify tempo) | Spotify search, preview and audio analysis (tempo, sections), else one of 8 bundled songs; moves change at Spotify section boundaries; `drive_by_dance(genre)` | the same 8 songs with offline-measured bpm/genre (`config/songs.yaml`), because Spotify closed audio-analysis to new apps; the choreography follows the beat; genre drives affect | **Intended change** (forced by Spotify). Section-based move changes became beat-based phrases. |
+| **Song requested by name** | Spotify lookup, else "Hmm, I don't know that one, how about this one instead" | fuzzy match on title, artist and aliases. local: the model can only pick a bundled song or "any" (schema enum) | Same idea; cannot pick a song that does not exist |
+| **"Stop MiRo"** | `stop_miro` flag checked in dance (no wake word for it was active in this snapshot) | a wake word; stops dance, tricks, identify and conversation | Works now |
+| **Tricks / hand gestures** (mediapipe) | `NodeVision` gestures. `ActionGestures` was **commented out** in `node_action.py` in this snapshot. | `action_tricks` + the `- scene` client; Open_Palm / Pointing_Up / Victory / ILoveYou | Works now (check the gesture → trick mapping is the one you showed) |
+| **Identify object** (YOLO) | YOLOv10m, the same 13 COCO classes, confirm, GPT one-liner | YOLOv10m, the same 13 classes, confirm in 4 of 10 frames, LLM one-liner | Same |
+| **Touch** (stroke → pleased noises, ear/tail scratch → "Ouch") | `node_affect`: mic-noise thresholds, pleased noises on petting | `forebrain/touch_noise.py` (same idea, thresholds rescaled for the averaged channels); purr on petting | Same |
+| **Basal-ganglia selection of the new behaviours** | priorities 2 / 1.5 / 1.2, all clipped to 1.0 by `basal_ganglia.py`, so they flapped against each other | their own band, 0.84 (0.89 while running), below halt/avert (0.9–1.0) | **Intended fix** |
+| **Cliff aversion** (`ActionAvert`) | commented out | restored | **Intended fix** |
+| **Stock MiRo brain** (affect, SPG, spatial, BG, kc) | MDK 230105 demo, edited | MDK 230105: 21 of its 30 demo files byte-identical; small, documented edits in 8 (`client_demo`, `node_affect`, `node_express`, `node_action`, `pars`, `node_loop`, `node_spatial`, `action_special`); `node_detect_audio_perftest` (a benchmark) dropped | Same |
+
+### Things to confirm
+
+1. **MiRo's ElevenLabs voice id.** It was `vy5FHcwTzRxpcxreOntL` in the March 2025 image and is now `0m2tDjDewtOfXrhxqgrJ`.
+2. **The Mickey Mouse prefix.** It was spoken word for word in the original. It is now in the style of the generated
+   reply.
+3. **Old keys.** The old image `aung9htet/ros_miro:public` still contains API keys in its source files
+   (`action_llm.py`, `action_dance.py`, `node_detect_word.py`). As the README's "Online setup" says, rotate them, and make the
+   image private or delete it.

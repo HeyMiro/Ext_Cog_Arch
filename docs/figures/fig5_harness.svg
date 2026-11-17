@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="330" viewBox="0 0 1000 330" font-family="Helvetica, Arial, 'Liberation Sans', sans-serif">
+<defs></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="209.0" y="34.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">Front</text>
+<text x="209.0" y="46.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">end</text>
+<line x1="180.0" y1="56" x2="180.0" y2="300" stroke="#d9d9d9" stroke-width="0.7"/>
+<text x="267.0" y="34.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">Voice</text>
+<text x="267.0" y="46.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">activity</text>
+<line x1="238.0" y1="56" x2="238.0" y2="300" stroke="#d9d9d9" stroke-width="0.7"/>
+<text x="325.0" y="34.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">Wake</text>
+<text x="325.0" y="46.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">word</text>
+<line x1="296.0" y1="56" x2="296.0" y2="300" stroke="#d9d9d9" stroke-width="0.7"/>
+<text x="383.0" y="34.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">End of</text>
+<text x="383.0" y="46.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">turn</text>
+<line x1="354.0" y1="56" x2="354.0" y2="300" stroke="#d9d9d9" stroke-width="0.7"/>
+<text x="441.0" y="34.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">Speech-</text>
+<text x="441.0" y="46.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">to-text</text>
+<line x1="412.0" y1="56" x2="412.0" y2="300" stroke="#d9d9d9" stroke-width="0.7"/>
+<text x="499.0" y="34.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">Language</text>
+<text x="499.0" y="46.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">model</text>
+<line x1="470.0" y1="56" x2="470.0" y2="300" stroke="#d9d9d9" stroke-width="0.7"/>
+<text x="557.0" y="34.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">Text-to-</text>
+<text x="557.0" y="46.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">speech</text>
+<line x1="528.0" y1="56" x2="528.0" y2="300" stroke="#d9d9d9" stroke-width="0.7"/>
+<text x="615.0" y="34.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">Dialogue,</text>
+<text x="615.0" y="46.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">behaviours</text>
+<line x1="586.0" y1="56" x2="586.0" y2="300" stroke="#d9d9d9" stroke-width="0.7"/>
+<text x="673.0" y="34.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">Scene</text>
+<text x="673.0" y="46.0" font-size="9" font-weight="bold" text-anchor="middle" fill="#222222">(YOLO, gest.)</text>
+<line x1="644.0" y1="56" x2="644.0" y2="300" stroke="#d9d9d9" stroke-width="0.7"/>
+<line x1="702.0" y1="56" x2="702.0" y2="300" stroke="#d9d9d9" stroke-width="0.7"/>
+<text x="716.0" y="40.0" font-size="9.5" font-weight="bold" text-anchor="start" fill="#222222">Measures</text>
+<text x="862.0" y="40.0" font-size="9.5" font-weight="bold" text-anchor="start" fill="#222222">Last result (offline)</text>
+<rect x="10.0" y="66.0" width="980.0" height="60.0" rx="0" fill="#fafafa" stroke="none" stroke-width="1.0"/>
+<text x="20.0" y="92.0" font-size="10.5" font-weight="bold" text-anchor="start" fill="#222222">Unit tests</text>
+<text x="20.0" y="107.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b">tests/, in CI on every push</text>
+<rect x="184.0" y="84.0" width="514.0" height="24.0" rx="4" fill="#ffffff" stroke="#8c8c8c" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="441.0" y="100.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b">every module; models, ROS and keys replaced by stubs</text>
+<text x="716.0" y="92.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#222222">the logic of every module,</text>
+<text x="716.0" y="104.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#222222">no GPU or network</text>
+<text x="862.0" y="92.0" font-size="8.6" font-weight="bold" text-anchor="start" fill="#222222">302 / 302 pass</text>
+<text x="20.0" y="152.0" font-size="10.5" font-weight="bold" text-anchor="start" fill="#222222">Stage benchmark</text>
+<text x="20.0" y="167.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b">tools/bench_pipeline.py</text>
+<rect x="242.0" y="144.0" width="50.0" height="24.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1.1"/>
+<rect x="300.0" y="144.0" width="50.0" height="24.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1.1"/>
+<rect x="358.0" y="144.0" width="50.0" height="24.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1.1"/>
+<rect x="416.0" y="144.0" width="50.0" height="24.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1.1"/>
+<rect x="474.0" y="144.0" width="50.0" height="24.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1.1"/>
+<rect x="532.0" y="144.0" width="50.0" height="24.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1.1"/>
+<rect x="648.0" y="144.0" width="50.0" height="24.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1.1"/>
+<text x="716.0" y="152.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#222222">each stage alone: F1, word</text>
+<text x="716.0" y="164.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#222222">error rate in noise, latency</text>
+<text x="862.0" y="152.0" font-size="8.6" font-weight="bold" text-anchor="start" fill="#222222">tables in</text>
+<text x="862.0" y="164.0" font-size="8.6" font-weight="bold" text-anchor="start" fill="#222222">TECHNICAL.md §17</text>
+<rect x="10.0" y="186.0" width="980.0" height="60.0" rx="0" fill="#fafafa" stroke="none" stroke-width="1.0"/>
+<text x="20.0" y="212.0" font-size="10.5" font-weight="bold" text-anchor="start" fill="#222222">LLM evaluation</text>
+<text x="20.0" y="227.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b">tools/eval_dialogue.py</text>
+<rect x="474.0" y="204.0" width="50.0" height="24.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1.1"/>
+<text x="716.0" y="212.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#222222">40 scripted messages: valid</text>
+<text x="716.0" y="224.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#222222">JSON, action F1, latency</text>
+<text x="862.0" y="212.0" font-size="8.6" font-weight="bold" text-anchor="start" fill="#222222">40/40 valid, F1 0.98,</text>
+<text x="862.0" y="224.0" font-size="8.6" font-weight="bold" text-anchor="start" fill="#222222">0.46 s to 1st sentence</text>
+<text x="20.0" y="272.0" font-size="10.5" font-weight="bold" text-anchor="start" fill="#222222">Fake user</text>
+<text x="20.0" y="287.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b">tools/fake_user.py, in Gazebo</text>
+<rect x="184.0" y="264.0" width="456.0" height="24.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="412.0" y="280.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#2c64ad">synthetic voice on /miro/host/mics → real pipeline → MiRo's reaction</text>
+<text x="716.0" y="272.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#222222">the whole robot: reaction</text>
+<text x="716.0" y="284.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#222222">time per spoken line</text>
+<text x="862.0" y="272.0" font-size="8.6" font-weight="bold" text-anchor="start" fill="#222222">MiRo reacts in</text>
+<text x="862.0" y="284.0" font-size="8.6" font-weight="bold" text-anchor="start" fill="#222222">0.5–1.8 s</text>
+<text x="20.0" y="318.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b" font-style="italic">Test speech is synthesised by Kokoro in a voice different from MiRo's, so the right transcript is always known; bench_pipeline.py adds noise at 20, 10, 5 and 0 dB SNR.</text>
+</svg>

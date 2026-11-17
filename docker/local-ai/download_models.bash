@@ -1,13 +1,15 @@
 #!/bin/bash
 #
-# Download the pinned local-AI models (models.env) into the Docker volume
-# heymiro-models, once. Needs internet; everything after this runs offline.
+# Download the pinned local-AI models (models.env) once. Needs internet;
+# everything after this runs offline.
 #
 #   docker/local-ai/download_models.bash          # default (4B LLM)
 #   docker/local-ai/download_models.bash --9b     # also the 9B LLM
 #
-# Files land in the volume as /models/<repo>/<file>. Re-running only
-# fetches what is missing.
+# LLM, speech-to-text, voice and end-of-turn models land in the volume
+# heymiro-models as /models/<repo>/<file>; the YOLO weights for the scene
+# client land in the volume heymiro-cache (mounted at /root/.cache in the
+# ROS container). Re-running only fetches what is missing.
 
 set -e
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,3 +39,21 @@ docker run --rm -v heymiro-models:/models -e HF_HUB_DISABLE_TELEMETRY=1 python:3
 	rm -rf /models/*/*/.cache
 	du -sh /models/*/*
 ' _ "${specs[@]}"
+
+# YOLO weights for the scene client (heymiro-cache -> /root/.cache/heymiro/weights)
+yolo_url="$(sed -n "s/^YOLO=//p" "$HERE/models.env")"
+[ -n "$yolo_url" ] || { echo "no YOLO in models.env"; exit 1; }
+docker volume create heymiro-cache >/dev/null
+docker run --rm -v heymiro-cache:/cache python:3.12-slim python3 -c '
+import os, sys, urllib.request
+url = sys.argv[1]
+path = os.path.join("/cache/heymiro/weights", os.path.basename(url))
+os.makedirs(os.path.dirname(path), exist_ok=True)
+if os.path.isfile(path) and os.path.getsize(path) > 100000:
+	print("== YOLO weights already there: " + os.path.basename(path))
+else:
+	print("== YOLO weights " + os.path.basename(path))
+	urllib.request.urlretrieve(url, path + ".part")
+	os.replace(path + ".part", path)
+print("%.0f MB  heymiro-cache:/heymiro/weights/%s" % (os.path.getsize(path) / 1e6, os.path.basename(path)))
+' "$yolo_url"

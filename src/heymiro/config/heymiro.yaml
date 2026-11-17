@@ -1,0 +1,189 @@
+# Hey MiRo - settings shared by the robot and the simulator
+#
+# Non-secret settings only. API keys and API routes (base URLs) are read
+# from the secrets file / environment - see config/secrets.env.example at
+# the repository root and the README ("Configuration").
+#
+# Overrides, in increasing precedence:
+#   config/platform/<robot|sim>.yaml   (the few robot/sim differences; chosen by
+#                                      run.sh --robot|--sim, i.e. $HEYMIRO_PLATFORM,
+#                                      else $MIRO_MODE, else robot)
+#   config/heymiro.local.yaml          (gitignored, your personal tweaks)
+#   $HEYMIRO_CONFIG                    (path to another YAML overlay)
+#   $HEYMIRO_SET="a.b=c;d.e=f"         (one-off overrides, e.g. from run.sh --offline/--online)
+#
+# Keys marked [platform] are robot defaults that config/platform/sim.yaml changes.
+#
+# Relative paths are resolved from the project root (the folder holding
+# config/, core/ and assets/).
+
+platform: robot                 # [platform] robot | sim (checked against the simulator flag at runtime)
+
+mdk:
+  # [platform] demo flags forced on top of platform_parameters
+  # (see pars.py action_demo_flags): v = MiRo's own vocaliser off, so it
+  # does not hum over the speech; x = special (AprilTag) responses off
+  demo_flags: "vx"
+
+ai:
+  # local = everything on this computer's GPU (docker/local-ai, no keys,
+  #         no internet); cloud = the HRI'25 services (OpenAI, ElevenLabs,
+  #         Picovoice; keys in ~/.config/heymiro/secrets.env)
+  provider: local
+  local:
+    llm_url: http://127.0.0.1:8080/v1      # docker/local-ai llm (llama.cpp)
+    speech_url: http://127.0.0.1:8090/v1   # docker/local-ai speech
+    timeout_s: 15
+    stream: true                # speak the first sentence while the rest is generated
+    structured_output: true     # JSON-schema-constrained replies (always valid)
+    top_k: 20                   # Qwen's non-thinking sampling
+    top_p: 0.8
+    wake_word: asr              # asr (local speech-to-text) | porcupine (needs a key)
+    vad: silero                 # silero | energy | cobra (needs a key)
+    end_of_turn: smart_turn     # smart_turn | silence (hearing.end_silence_s)
+    turn_threshold: 0.9         # smart-turn probability that counts as "finished" (finished speech scores >= 0.97)
+    turn_min_silence_s: 0.3     # first ask smart-turn after this much silence
+    end_silence_s: 1.2          # ... and stop waiting after this much at most
+    stt_prompt: "MiRo"          # spelling hint for the speech-to-text
+    voice: af_heart             # Kokoro voice for MiRo
+    pitch: 1.15                 # > 1 = higher, smaller-sounding (HRI'25 picked a high voice)
+    speed: 1.05
+    impression_voice: af_sky    # the Mickey Mouse impression
+    impression_pitch: 1.45
+    settings:                   # replace these cloud settings when local
+      llm:
+        model: heymiro          # the llama.cpp alias (Qwen3.5, see docker/local-ai)
+        temperature: 0.7
+        max_tokens: 200
+        timeout_s: 15
+        object_comment_model: heymiro
+      stt:
+        model: whisper-large-v3-turbo
+        timeout_s: 10
+
+features:
+  conversation: true            # "Hey MiRo" -> speech-to-text -> LLM -> voice (local: Whisper/Qwen/Kokoro; cloud: Whisper/GPT-4o/ElevenLabs)
+  wake_word: true               # wake words (local: ai.local.wake_word; cloud: Porcupine, needs PICOVOICE_ACCESS_KEY)
+  dance: true                   # "Dance MiRo" / "can you dance to ..."
+  tricks: true                  # gesture tricks (mediapipe)
+  identify: true                # object game (YOLO)
+  touch_reactions: true         # ear/tail scratch -> "Ouch!" clips (MiRo mics only)
+  purr: true                    # pleased noises when stroked
+  sleep_command: true           # "go to sleep" honoured
+  scene_context: true           # while talking, YOLO tells the LLM what the camera sees (as text)
+  spontaneous_gestures: false   # react to hand gestures without being asked
+  spotify: false                # optional song lookup (see cloud/music.py); cloud provider only
+  log_transcripts: false        # print what users said (privacy: off by default)
+
+hearing:
+  input_topic: sensors/mics     # [platform] speech input; host/mics = external/host microphone bridge
+  salience_topic: sensors/mics  # [platform] what the "- mics" client localises (stock behaviour)
+  miro_channels: [0, 1]         # channels averaged for speech (0 = left ear, 1 = right ear)
+  gain: 1.0
+  highpass_hz: 80               # remove wheel/motor rumble and hum below the voice band (0 = off)
+  wake_words:
+    - id: hey_miro
+      file: assets/wakewords/Hey-Miro_en_linux_v3_0_0.ppn
+      sensitivity: 0.6
+      access_key_env: PICOVOICE_ACCESS_KEY_HEY_MIRO
+    - id: dance_miro
+      file: assets/wakewords/Dance-MiRo_en_linux_v3_0_0.ppn
+      sensitivity: 0.6
+      access_key_env: PICOVOICE_ACCESS_KEY_DANCE_MIRO
+    - id: stop_miro
+      file: assets/wakewords/Stop-MiRo_en_linux_v3_0_0.ppn
+      sensitivity: 0.6
+      access_key_env: PICOVOICE_ACCESS_KEY_STOP_MIRO
+  vad: cobra                    # cobra | energy (energy needs no key)
+  vad_threshold: 0.6            # voice probability counted as speech
+  energy_threshold_dbfs: -38.0  # used by the energy VAD
+  onset_frames: 3               # consecutive voiced 32 ms frames to start an utterance
+  preroll_s: 0.5
+  end_silence_s: 3.0            # HRI paper: stop recording after ~3 s of silence
+  no_speech_timeout_s: 3.0      # ... and end the conversation if nobody speaks for 3 s
+  max_utterance_s: 20.0
+  self_hearing_guard_s: 0.3     # [platform] ignore the mics this long after MiRo stops speaking
+  touch_from_mics: true         # [platform] ear/tail scratch detection (only valid on sensors/mics)
+  touch_noise:
+    zcr_min: 190
+    peak_ear: 23000
+    peak_tail: 30000
+    hits_to_react: 4
+    window_s: 2.0
+    cooldown_s: 3.0
+
+voice:
+  backend: host                 # host = laptop / Bluetooth speaker; miro = MiRo's own speaker (8 kHz)
+  device: null                  # sounddevice output device (index or name substring); null = default
+  volume: 1.0
+  music_volume: 0.6
+  thinking_music: true          # "Hmm" + loading tune while the cloud is busy (HRI paper)
+
+tts:
+  provider: elevenlabs          # elevenlabs | none
+  model_id: eleven_multilingual_v2
+  voice_id: 0m2tDjDewtOfXrhxqgrJ
+  impression_voice_id: dfZGXKiIzjizWtJ0NgPy
+  stability: 0.5
+  similarity_boost: 0.75
+  timeout_s: 20
+
+stt:
+  model: whisper-1
+  language: en
+  timeout_s: 20
+
+llm:
+  model: gpt-4o
+  temperature: 0.8
+  max_tokens: 400
+  json_mode: true
+  timeout_s: 25
+  max_history_turns: 10
+  persona_file: config/persona.md
+  event_name: the Festival of Mind
+  object_comment_model: gpt-4o-mini
+
+converse:
+  face_user: apriltag           # [platform] apriltag | sound | none
+  face_rotate_speed: 0.08       # rad/s turning while looking for the tag
+  face_timeout_s: 8.0
+  spin_speed: 0.4
+  spin_s: 3.0
+  preempt_abort_s: 10.0         # end the conversation if pre-empted for this long
+
+dance:
+  songs_manifest: config/songs.yaml
+  max_duration_s: 60.0
+  default_bpm: 120.0
+  wheels: true
+  allow_translation: true
+
+tricks:
+  duration_s: 20.0
+  max_tricks: 5
+  min_score: 0.6
+  map:
+    Open_Palm: greet
+    Pointing_Up: spin
+    Victory: ears
+    ILoveYou: party
+
+identify:
+  duration_s: 15.0
+  confirm: [4, 10]              # object seen in 4 of the last 10 detections
+  classes: [car, book, cell phone, mouse, apple, banana, orange, cup, fork, knife, spoon, bottle, sports ball]
+
+scene:
+  rate_hz: 5.0                  # [platform]
+  camera: caml
+  yolo_weights: yolov10m.pt     # downloaded on first use into $HEYMIRO_CACHE_DIR/weights
+  yolo_conf: 0.4
+  context_classes: []           # classes described to the LLM while talking ([] = all 80 COCO classes)
+  gesture_model: assets/models/gesture_recognizer.task
+  device: auto                  # auto | cpu | cuda
+  undistort: false
+  intrinsics: null              # {camera_matrix: [[...]], dist_coeffs: [...]} if undistort is true
+
+clips:
+  manifest: config/clips.yaml

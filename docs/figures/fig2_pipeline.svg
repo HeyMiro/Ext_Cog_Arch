@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="372" viewBox="0 0 1000 372" font-family="Helvetica, Arial, 'Liberation Sans', sans-serif">
+<defs><marker id="ah222222" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#222222"/></marker></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<rect x="390.5" y="22.0" width="187.5" height="40.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="484.2" y="40.4" font-size="10" font-weight="bold" text-anchor="middle" fill="#222222">Camera → YOLOv10m</text>
+<text x="484.2" y="55.8" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#333">"I can see a cup and a person"</text>
+<path d="M 578.0 42.0 L 715.0 42.0 L 715.0 96.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<text x="637.5" y="38.0" font-size="8.4" font-weight="normal" text-anchor="middle" fill="#5b5b5b" font-style="italic">scene context</text>
+<rect x="788.5" y="22.0" width="187.5" height="40.0" rx="4" fill="#f1f1f1" stroke="#8c8c8c" stroke-width="1.1"/>
+<text x="882.2" y="40.4" font-size="10" font-weight="bold" text-anchor="middle" fill="#222222">Affect · basal ganglia</text>
+<text x="882.2" y="55.8" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#333">emotion, valence, arousal, actions</text>
+<path d="M 755.0 96.0 L 755.0 42.0 L 788.5 42.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<rect x="92.0" y="96.0" width="88.0" height="50.0" rx="4" fill="#ffffff" stroke="#222222" stroke-width="1.1"/>
+<text x="136.0" y="117.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Micro-</text>
+<text x="136.0" y="132.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">phones</text>
+<path d="M 180.0 121.0 L 191.5 121.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<rect x="92.0" y="166.0" width="88.0" height="102.0" rx="4" fill="#fafafa" stroke="#d9d9d9" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="136.0" y="210.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#222222">4 × MiRo mics</text>
+<text x="136.0" y="221.7" font-size="9" font-weight="normal" text-anchor="middle" fill="#222222">or PC mic</text>
+<rect x="191.5" y="96.0" width="88.0" height="50.0" rx="4" fill="#ffffff" stroke="#222222" stroke-width="1.1"/>
+<text x="235.5" y="117.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Front</text>
+<text x="235.5" y="132.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">end</text>
+<path d="M 279.5 121.0 L 291.0 121.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<rect x="191.5" y="166.0" width="88.0" height="102.0" rx="4" fill="#fafafa" stroke="#d9d9d9" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="235.5" y="210.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#222222">20→16 kHz</text>
+<text x="235.5" y="221.7" font-size="9" font-weight="normal" text-anchor="middle" fill="#222222">80 Hz HPF</text>
+<rect x="291.0" y="96.0" width="88.0" height="50.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="335.0" y="117.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Voice</text>
+<text x="335.0" y="132.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">activity</text>
+<path d="M 379.0 121.0 L 390.5 121.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<rect x="291.0" y="166.0" width="88.0" height="46.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1"/>
+<text x="335.0" y="192.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">Silero VAD v5</text>
+<rect x="291.0" y="222.0" width="88.0" height="46.0" rx="4" fill="#fcefe1" stroke="#bf6316" stroke-width="1"/>
+<text x="335.0" y="242.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">Picovoice</text>
+<text x="335.0" y="254.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">Cobra</text>
+<rect x="390.5" y="96.0" width="88.0" height="50.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="434.5" y="117.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Wake</text>
+<text x="434.5" y="132.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">word</text>
+<path d="M 478.5 121.0 L 490.0 121.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<rect x="390.5" y="166.0" width="88.0" height="46.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1"/>
+<text x="434.5" y="186.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">Whisper +</text>
+<text x="434.5" y="198.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">fuzzy match</text>
+<rect x="390.5" y="222.0" width="88.0" height="46.0" rx="4" fill="#fcefe1" stroke="#bf6316" stroke-width="1"/>
+<text x="434.5" y="242.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">Picovoice</text>
+<text x="434.5" y="254.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">Porcupine</text>
+<rect x="490.0" y="96.0" width="88.0" height="50.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="534.0" y="117.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">End of</text>
+<text x="534.0" y="132.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">turn</text>
+<path d="M 578.0 121.0 L 589.5 121.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<rect x="490.0" y="166.0" width="88.0" height="46.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1"/>
+<text x="534.0" y="186.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">smart-turn</text>
+<text x="534.0" y="198.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">v3.2</text>
+<rect x="490.0" y="222.0" width="88.0" height="46.0" rx="4" fill="#fcefe1" stroke="#bf6316" stroke-width="1"/>
+<text x="534.0" y="242.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">3 s of</text>
+<text x="534.0" y="254.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">silence</text>
+<rect x="589.5" y="96.0" width="88.0" height="50.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="633.5" y="117.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Speech-</text>
+<text x="633.5" y="132.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">to-text</text>
+<path d="M 677.5 121.0 L 689.0 121.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<rect x="589.5" y="166.0" width="88.0" height="46.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1"/>
+<text x="633.5" y="186.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">Whisper</text>
+<text x="633.5" y="198.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">v3-turbo</text>
+<rect x="589.5" y="222.0" width="88.0" height="46.0" rx="4" fill="#fcefe1" stroke="#bf6316" stroke-width="1"/>
+<text x="633.5" y="242.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">OpenAI</text>
+<text x="633.5" y="254.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">whisper-1</text>
+<rect x="689.0" y="96.0" width="88.0" height="50.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="733.0" y="117.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Language</text>
+<text x="733.0" y="132.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">model</text>
+<path d="M 777.0 121.0 L 788.5 121.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<rect x="689.0" y="166.0" width="88.0" height="46.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1"/>
+<text x="733.0" y="186.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">Qwen3.5-4B</text>
+<text x="733.0" y="198.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">llama.cpp</text>
+<rect x="689.0" y="222.0" width="88.0" height="46.0" rx="4" fill="#fcefe1" stroke="#bf6316" stroke-width="1"/>
+<text x="733.0" y="248.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">GPT-4o</text>
+<rect x="788.5" y="96.0" width="88.0" height="50.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="832.5" y="117.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Text-to-</text>
+<text x="832.5" y="132.5" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">speech</text>
+<path d="M 876.5 121.0 L 888.0 121.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<rect x="788.5" y="166.0" width="88.0" height="46.0" rx="4" fill="#e3f3ec" stroke="#23845f" stroke-width="1"/>
+<text x="832.5" y="192.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">Kokoro-82M</text>
+<rect x="788.5" y="222.0" width="88.0" height="46.0" rx="4" fill="#fcefe1" stroke="#bf6316" stroke-width="1"/>
+<text x="832.5" y="248.5" font-size="9.2" font-weight="normal" text-anchor="middle" fill="#222222">ElevenLabs</text>
+<rect x="888.0" y="96.0" width="88.0" height="50.0" rx="4" fill="#ffffff" stroke="#222222" stroke-width="1.1"/>
+<text x="932.0" y="125.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Speaker</text>
+<rect x="888.0" y="166.0" width="88.0" height="102.0" rx="4" fill="#fafafa" stroke="#d9d9d9" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="932.0" y="210.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#222222">MiRo or</text>
+<text x="932.0" y="221.7" font-size="9" font-weight="normal" text-anchor="middle" fill="#222222">PC speaker</text>
+<text x="14.0" y="126.0" font-size="11" font-weight="bold" text-anchor="start" fill="#222222">Stage</text>
+<rect x="14.0" y="184.5" width="46.8" height="11.5" rx="5.5" fill="#e3f3ec" stroke="#23845f" stroke-width="0.8"/>
+<text x="37.4" y="193.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#23845f">offline</text>
+<text x="14.0" y="208.0" font-size="8" font-weight="normal" text-anchor="start" fill="#5b5b5b">local, no keys</text>
+<rect x="14.0" y="240.5" width="41.4" height="11.5" rx="5.5" fill="#fcefe1" stroke="#bf6316" stroke-width="0.8"/>
+<text x="34.7" y="249.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#bf6316">online</text>
+<text x="14.0" y="264.0" font-size="8" font-weight="normal" text-anchor="start" fill="#5b5b5b">HRI '25 cloud</text>
+<path d="M 291.0 282.0 v 6 h 287.0 v -6" fill="none" stroke="#5b5b5b" stroke-width="1"/>
+<text x="434.5" y="302.0" font-size="8.8" font-weight="normal" text-anchor="middle" fill="#5b5b5b" font-style="italic">always listening: every 32 ms frame</text>
+<path d="M 589.5 282.0 v 6 h 287.0 v -6" fill="none" stroke="#5b5b5b" stroke-width="1"/>
+<text x="733.0" y="302.0" font-size="8.8" font-weight="normal" text-anchor="middle" fill="#5b5b5b" font-style="italic">once per turn, streamed sentence by sentence</text>
+<rect x="14.0" y="326.0" width="972.0" height="36.0" rx="4" fill="#ffffff" stroke="#d9d9d9" stroke-width="1"/>
+<text x="26.0" y="341.0" font-size="9.2" font-weight="bold" text-anchor="start" fill="#222222">From the end of the user's speech to MiRo answering:</text>
+<rect x="420.0" y="332.5" width="46.8" height="11.5" rx="5.5" fill="#e3f3ec" stroke="#23845f" stroke-width="0.8"/>
+<text x="443.4" y="341.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#23845f">offline</text>
+<text x="474.0" y="341.0" font-size="9" font-weight="normal" text-anchor="start" fill="#222222">end of turn 0.32 s + STT 0.09 s + LLM 1st sentence 0.44 s + TTS 0.05 s ≈ 0.9–1.2 s (RTX 4070 Ti)</text>
+<rect x="420.0" y="347.5" width="41.4" height="11.5" rx="5.5" fill="#fcefe1" stroke="#bf6316" stroke-width="0.8"/>
+<text x="440.7" y="356.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#bf6316">online</text>
+<text x="474.0" y="356.0" font-size="9" font-weight="normal" text-anchor="start" fill="#222222">3 s of silence + 0.5–5 s for the cloud services (HRI '25)</text>
+</svg>

@@ -1,326 +1,562 @@
-# Hey MiRo! — an extended cognitive architecture for MiRo-e
+# Hey MiRo! An extended cognitive architecture for MiRo-e
 
 This repository holds the code for **"Hey Miro! Multimodal Interaction with an Animal-like Robot Companion with
 Conversational Abilities"** (Htet, Bernacka, Marei, Holden & Prescott, HRI '25). It extends the layered,
-brain-inspired control system of the MiRo-e robot (Mitchinson & Prescott, 2016) with new **forebrain**
-components:
+brain-inspired control system of the MiRo-e robot (Mitchinson & Prescott, 2016) with new **forebrain** components:
 
-- **Spoken conversation:** wake word → voice activity detection → Whisper → GPT-4o → ElevenLabs.
+- **Spoken conversation:** wake word, listening, speech-to-text, a language model and MiRo's own voice.
 - **Scene awareness:** YOLO object detection and mediapipe hand gestures.
-- **Behaviours triggered by speech:** spinning, an impression, dancing to music, tricks, and an object game.
+- **Behaviours triggered by speech:** spinning, ear wiggles, an impression, dancing to music, tricks and an object
+  game.
 
-Every behaviour competes through MiRo's basal-ganglia action selection and modulates its affect.
+Every behaviour competes through MiRo's basal-ganglia action selection and modulates its affect, so MiRo keeps all
+of its animal-like behaviour and language is one more source of goals.
 
-**Two ways to run the AI** (`ai.provider` in `config/heymiro.yaml`):
+The demo runs in **two versions** and on **two platforms**. You choose each with a flag:
 
-| Provider | Wake word, VAD | Speech-to-text | LLM | Voice | Needs |
-|---|---|---|---|---|---|
-| `local` (default) | local Whisper, Silero, smart-turn | Whisper large-v3-turbo | Qwen3.5 (llama.cpp) | Kokoro | an NVIDIA GPU; no keys, works offline |
-| `cloud` (HRI '25) | Picovoice Porcupine + Cobra | OpenAI Whisper | GPT-4o | ElevenLabs | API keys |
-
-**To run it:** [Gazebo simulator guide](docs/RUN_SIMULATOR.md) · [real robot guide](docs/RUN_ROBOT.md).
-**How it works** (models, noise handling, VAD, YOLO scene context, benchmarks): [docs/TECHNICAL.md](docs/TECHNICAL.md).
-
-The local pipeline streams the reply, so MiRo starts speaking while the rest is still being generated. See
-[docs/local_ai.md](docs/local_ai.md) for the design, the models and measured latency. A comparison with the original
-HRI '25 code is in [docs/hri25_parity.md](docs/hri25_parity.md).
-
-There are two versions of the demo:
-
-| Folder | Runs against | Notes |
+|  | **Simulator** (Gazebo, your PC's mic and speaker) | **Robot** (a physical MiRo-e) |
 |---|---|---|
-| [`src/cloud_demo_robot`](src/cloud_demo_robot) | a physical MiRo-e | MiRo's own microphones, or an external/host microphone (`--ext-mic`) |
-| [`src/cloud_demo_sim`](src/cloud_demo_sim) | the MiRo Gazebo simulator | the simulator has no sound, so a host **microphone bridge** publishes your laptop's microphone on a new topic `/miro/host/mics`, and MiRo speaks through your laptop speaker |
+| **Offline**: local models only, no keys, no internet | `run.sh --sim --offline` | `run.sh --robot --offline` |
+| **Online**: the original HRI '25 cloud pipeline | `run.sh --sim --online` | `run.sh --robot --online` |
 
-The two folders contain the same code. Only their settings (`config/heymiro.yaml`), launcher and README differ.
-CI checks that they stay in sync.
+**Contents**
 
-The Docker image is only the **environment** (ROS Noetic, MiRo MDK, Gazebo, Python packages). The code is
-**bind-mounted** from this repository when the container starts. Changes therefore come from git: there is no
-`docker commit`, and no code or keys live inside the image.
+1. [Architecture and pipeline](#1-architecture-and-pipeline)
+2. [Requirements](#2-requirements)
+3. [Setup (once per computer)](#3-setup-once-per-computer)
+4. [Offline setup](#4-offline-setup-local-models)
+5. [Online setup](#5-online-setup-cloud-services)
+6. [Run in the simulator](#6-run-in-the-simulator)
+7. [Run on the robot](#7-run-on-the-robot)
+8. [Switching: offline/online, simulator/robot](#8-switching-offlineonline-simulatorrobot)
+9. [Configuration](#9-configuration)
+10. [Test harness](#10-test-harness)
+11. [Repository layout](#11-repository-layout)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Citation and credits](#13-citation-and-credits)
 
-```mermaid
-flowchart TB
-  subgraph P4["Off-board / cloud (P4)"]
-    STT[Whisper] --- LLM[GPT-4o] --- TTS[ElevenLabs] --- SPOT[Spotify, optional]
-  end
-  subgraph FB["Forebrain (new, HRI '25)"]
-    HEAR[node_hearing<br/>wake word, VAD] --> DLG[node_dialogue]
-    SCENE[node_scene<br/>YOLO, gestures] --> FBM[node_forebrain<br/>top-down modulation]
-    DLG <--> FBM
-    VOICE[node_voice<br/>clips, speech, music]
-  end
-  subgraph BS["Brainstem (stock MiRo demo)"]
-    AFF[affect<br/>valence/arousal] --> SPG[express / SPG]
-    SPAT[spatial salience] --> BG[basal ganglia<br/>action selection]
-    BG --> MPG[motor patterns / kc]
-  end
-  subgraph SC["Spinal cord"]
-    REF[cliff & freeze reflexes]
-  end
-  DLG <--> P4
-  FBM --> AFF
-  FBM --> BG
-  FB --> SPG
-  MPG --> ACT[actuators]
-  SPG --> ACT
-  REF --> ACT
-```
+The design of every stage, the models and why they were chosen, the benchmarks, and a behaviour-by-behaviour
+comparison with the original HRI '25 code are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
-Details: [docs/architecture.md](docs/architecture.md).
+---
 
-## Repository layout
+## 1. Architecture and pipeline
 
-```
-README.md                  this file
-config/secrets.env.example template for your API keys and routes (copy it OUTSIDE the repo)
-docker/                    Dockerfile + run/build scripts for the environment image
-docs/                      architecture, configuration, simulation, security
-src/cloud_demo_robot/      the demo for the physical robot   (bind-mounted into the container)
-src/cloud_demo_sim/        the demo for the Gazebo simulator (bind-mounted into the container)
-docker/local-ai/            local AI services: llama.cpp LLM + speech (Whisper, Kokoro, smart-turn)
-tools/check_copies.py      keeps the two project copies in sync
-.github/workflows/         image build (GHCR) and CI (tests, secret scan)
-```
+Paper-ready versions of every figure (SVG, PDF and PNG) are in [docs/figures/](docs/figures/). They are drawn by
+`docs/figures/make_figures.py`, and `docs/figures/render.bash` regenerates them after an edit.
 
-Inside each project:
+### The architecture
 
-```
-run_robot.sh / run_sim.sh  start everything
-core/                      MDK-style demo code: client_demo.py, node_*.py, action/action_*.py,
-                           plus forebrain/ (hearing, dialogue), cloud/ (P4 clients) and choreography/ (dancing)
-config/                    heymiro.yaml (settings), persona.md (LLM persona), clips.yaml, songs.yaml
-assets/                    voice clips, songs, wake words, gesture model
-tools/                     host_audio_bridge.py, mic_check.py, make_clip.py, estimate_bpm.py,
-                           fake_user.py (synthetic user), eval_dialogue.py (LLM evaluation)
-tests/                     unit tests (no ROS needed)
-```
+![Figure 1: the Hey MiRo cognitive architecture](docs/figures/fig1_architecture.png)
 
-## Install Docker and get the code
+**Figure 1. The Hey MiRo cognitive architecture.** MiRo's stock control system (grey) is layered like the
+vertebrate nervous system (Mitchinson & Prescott, 2016):
 
-> **Step-by-step guides** with every command to copy and paste:
-> **[Run in the Gazebo simulator](docs/RUN_SIMULATOR.md)** and **[Run on the real robot](docs/RUN_ROBOT.md)**.
+- **P1, the spinal cord:** signal conditioning and reflexes.
+- **P2, the brainstem:** affect, spatial attention, expression, and basal-ganglia action selection.
 
-1. Install Docker on your Ubuntu machine: https://docs.docker.com/engine/install/ubuntu/
-2. Recommended: run Docker without sudo (https://docs.docker.com/engine/install/linux-postinstall/). `run_docker.bash` also works under sudo; it then uses your own secrets file and sound server.
-3. Optional, if your machine has an NVIDIA GPU (YOLO runs faster on it): install the NVIDIA driver and the
-   [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
-   Without them everything still runs on the CPU.
-4. Install [Visual Studio Code](https://code.visualstudio.com/) and the **Dev Containers** extension. I use it to
-   write and debug code inside the container.
-5. Clone this repository:
+Hey MiRo adds:
 
-   ```bash
-   git clone https://github.com/HeyMiro/Ext_Cog_Arch.git
-   cd Ext_Cog_Arch
-   ```
+- **P3, a forebrain (blue):**
+  - hearing, dialogue and voice;
+  - scene awareness;
+  - an integration node that turns events into intentions;
+  - four new behaviours (converse, dance, tricks, identify).
+- **P4, an off-board layer** of speech and language models.
 
-6. Get the environment image. CI builds it from [`docker/Dockerfile`](docker/Dockerfile), one per branch
-   (`ghcr.io/heymiro/ext_cog_arch:<branch>`, with `/` replaced by `-`; `:latest` for `main`). `run_docker.bash`
-   picks the one for the branch you have checked out:
+The forebrain does not replace the lower layers. It **modulates** them: it sets an affect target, borrows the
+expression channels, and enters its behaviours as **bids** to the stock basal ganglia, which still arbitrate every
+action. Reflexes such as cliff avoidance therefore always win. P4 is the only layer that differs between the two
+versions: local models (offline) or cloud services (online).
 
-   ```bash
-   ./docker/run_docker.bash --pull
-   ```
+### The conversation pipeline
 
-   If the package is private, log in first with a GitHub token that has `read:packages`:
-   `echo <token> | docker login ghcr.io -u <github-user> --password-stdin`.
-   Or build it yourself with `docker/build_image.bash`; see [docs/docker.md](docs/docker.md).
+![Figure 2: the conversation pipeline](docs/figures/fig2_pipeline.png)
 
-## Local AI services (default provider)
+**Figure 2. The conversation pipeline and its two implementations.**
+
+- The first three stages run continuously on every 32 ms audio frame. The speech-to-text, LLM and text-to-speech
+  stages run once per turn.
+- The LLM also receives a one-sentence description of what MiRo sees, and returns MiRo's emotion and actions with
+  its reply.
+- The offline version replaces the fixed 3 s silence with a learned end-of-turn model, and streams the reply
+  sentence by sentence. This is why it answers in about 1 s instead of 3.5–8 s.
+
+Each stage is implemented differently in the two versions:
+
+| Stage | **Offline** (`ai.provider: local`) | **Online** (`ai.provider: cloud`, HRI '25) |
+|---|---|---|
+| Voice activity detection | Silero VAD (CPU, in the ROS container) | Picovoice Cobra |
+| Wake words | local Whisper, fuzzy match of "Hey / Dance / Stop MiRo" | Picovoice Porcupine (`assets/wakewords/*.ppn`) |
+| End of turn | smart-turn v3.2: MiRo answers 0.3–1.2 s after you finish | a fixed ~3 s of silence |
+| Speech-to-text | faster-whisper large-v3-turbo (GPU) | OpenAI Whisper (`whisper-1`) |
+| Language model | Qwen3.5-4B (or 9B) on llama.cpp, JSON-schema constrained, streamed | GPT-4o (JSON mode) |
+| Text-to-speech | Kokoro-82M, first sentence plays while the rest is generated | ElevenLabs |
+| Object game comment | the local LLM | GPT-4o-mini |
+| Objects and gestures | YOLOv10m + mediapipe, local in both versions | same |
+| Songs | bundled mp3s with measured tempo, in both versions | same (Spotify lookup optional) |
+| Needs | an NVIDIA GPU (8 GB+) is best; CPU works with ~15 s answers | API keys and internet |
+
+### The conversation
+
+![Figure 3: the dialogue state machine](docs/figures/fig3_dialogue.png)
+
+**Figure 3. The dialogue state machine** (`core/forebrain/dialogue.py`). Each state also sets MiRo's pose, lights
+and affect. A dance, trick or object game requested in conversation suspends the dialogue, which resumes when the
+task ends.
+
+### Where it runs
+
+![Figure 4: deployment](docs/figures/fig4_deployment.png)
+
+**Figure 4. Deployment.** One ROS container runs MiRo's brain in both versions and on both platforms. The two
+switches change only where its inputs and models come from:
+
+- **Platform:** `--sim` runs Gazebo inside the container and uses the PC's microphone and speaker. `--robot-ip IP`
+  uses the ROS master on a physical MiRo-e over Wi-Fi.
+- **Version:** `--offline` uses the `docker/local-ai` services on the same PC. `--online` uses the cloud APIs.
+
+In detail:
+
+- **The ROS container** (`docker/run_docker.bash`) runs ROS Noetic, the MiRo MDK, Gazebo and MiRo's brain
+  (`src/heymiro`). It is the same for both versions. The code is **bind-mounted** from this repository, so edits
+  and `git pull` take effect immediately. Nothing is baked into the image, and there is no `docker commit`.
+- **The local AI services** (`docker/local-ai`), offline version only, run in two containers:
+  - `llm`: llama.cpp with Qwen3.5, on `127.0.0.1:8080`;
+  - `speech`: Whisper, Kokoro and smart-turn, on `127.0.0.1:8090`.
+- **The cloud services**, online version only, are reached with the keys in `~/.config/heymiro/secrets.env`.
+
+The online version is the original HRI '25 pipeline, refactored. It keeps the same persona, emotion rules,
+voices, clips and behaviours (see [docs/TECHNICAL.md §19](docs/TECHNICAL.md#19-parity-with-the-hri-25-demo-the-online-pipeline)).
+The offline version keeps the same behaviours and the same reply format, with local models.
+
+---
+
+## 2. Requirements
+
+- **Ubuntu** 22.04 or 24.04 (other Linux distributions with Docker work too).
+- **Docker** with your user in the `docker` group.
+- **An NVIDIA GPU with 8 GB or more** for the offline version, plus the
+  [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+  Docker 25+ can expose the GPU through CDI; no `nvidia` runtime entry is needed. Without a GPU, everything still
+  runs on the CPU, with answers taking ~15 s instead of ~1 s.
+- **About 40 GB of free disk:** the ROS image is ~11 GB, and the models are ~5 GB (~11 GB with the 9B model).
+- **PulseAudio or PipeWire** (the Ubuntu default), a microphone, and **headphones** for the simulator, so MiRo
+  doesn't hear itself.
+- For the robot: a **MiRo-e** on the same Wi-Fi network as the computer.
+
+---
+
+## 3. Setup (once per computer)
+
+**1. Install Docker** and allow your user to run it, then **log out and back in**:
 
 ```bash
-docker run --rm --gpus all ubuntu nvidia-smi   # check the GPU is visible (if not: docs/RUN_SIMULATOR.md)
-docker/local-ai/download_models.bash          # once, ~5 GB (pinned, ungated Hugging Face models)
-docker/run_docker.bash --sim --local-ai       # starts the services, then the container
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
 ```
 
-Details: [docs/local_ai.md](docs/local_ai.md). The secrets below are only needed for `ai.provider: cloud`.
+**2. Check that Docker can see the GPU** (skip this if you have no NVIDIA GPU):
 
-## Secrets and API routes
+```bash
+docker run --rm --gpus all ubuntu nvidia-smi
+```
 
-API keys and API **routes** (the base URL of each cloud service) are never stored in this repository or in the
-image. They live in one file in your home directory:
+It should print a table with your graphics card. If it says `could not select device driver`, run:
+
+```bash
+sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
+```
+
+**3. Get the code:**
+
+```bash
+git clone https://github.com/HeyMiro/Ext_Cog_Arch.git
+cd Ext_Cog_Arch
+git switch improved_version_online_offline
+```
+
+**4. Get the environment image** (ROS Noetic, MiRo MDK 2-230105, Gazebo 11 and the Python packages; ~11 GB):
+
+```bash
+docker/run_docker.bash --pull
+```
+
+`run_docker.bash` picks the image in this order:
+
+1. the one CI published for the checked-out branch, `ghcr.io/heymiro/ext_cog_arch:<branch>`;
+2. a local build, `heymiro-env:local`;
+3. `:latest`;
+4. the last published environment image.
+
+To build the image yourself, run `docker/build_image.bash` (add `--cpu` for a CPU-only torch). The packages on
+GHCR may be private; if so, log in first:
+`echo <token> | docker login ghcr.io -u <github-user> --password-stdin`, with a token that has `read:packages`.
+
+Then do the setup for the version you want: [offline](#4-offline-setup-local-models),
+[online](#5-online-setup-cloud-services), or both.
+
+---
+
+## 4. Offline setup (local models)
+
+**Download the models once** (~5 GB, 5–30 minutes). Everything after this runs without internet:
+
+```bash
+docker/local-ai/download_models.bash          # Qwen3.5-4B, Whisper, Kokoro, smart-turn, YOLO weights
+docker/local-ai/download_models.bash --9b     # optional: also the larger Qwen3.5-9B
+```
+
+The models are free, ungated (no account needed) and pinned to exact revisions in `docker/local-ai/models.env`.
+They go into the Docker volume `heymiro-models`; the YOLO weights go into `heymiro-cache`. Re-running the script
+only fetches what is missing.
+
+| Job | Model | Licence |
+|---|---|---|
+| Language model | Qwen3.5-4B Q4_K_M + vision projector (9B optional) | Apache-2.0 |
+| Speech-to-text | faster-whisper large-v3-turbo | MIT |
+| Voice | Kokoro-82M (`af_heart`, pitched up for MiRo) | Apache-2.0 |
+| End of turn | smart-turn v3.2 | BSD-2-Clause |
+| Voice activity | Silero VAD v5 (inside the environment image) | MIT |
+| Objects | YOLOv10m | AGPL-3.0 |
+
+**Start the services** every time you boot. Either run `docker/run_docker.bash ... --offline`, which does this for
+you, or start them by hand:
+
+```bash
+docker/local-ai/up.bash            # Qwen3.5-4B (leaves room for Gazebo on the GPU)
+docker/local-ai/up.bash --9b       # Qwen3.5-9B (robot: no Gazebo on the GPU)
+docker/local-ai/up.bash --down     # stop them and free the GPU
+```
+
+`up.bash` waits until the models are loaded. If Docker has no usable GPU, it starts the same services on the CPU
+with a warning. Check them with `curl -s http://127.0.0.1:8090/health`, which should print
+`"ok":true,"device":"cuda"`.
+
+No API keys are used. Spotify is switched off in this version, and the Picovoice wake words and Cobra VAD are
+replaced by local models.
+
+---
+
+## 5. Online setup (cloud services)
+
+**Create the secrets file outside the repository** and fill in your keys:
 
 ```bash
 install -D -m 600 config/secrets.env.example ~/.config/heymiro/secrets.env
-nano ~/.config/heymiro/secrets.env     # fill in your keys
+nano ~/.config/heymiro/secrets.env
 ```
 
-`docker/run_docker.bash` mounts this file **read-only** at `/run/secrets/heymiro.env` inside the container, and
-`core/heymiro_config.py` reads it.
-
-| Variable | Used for | Default route |
+| Variable | Used for | Without it |
 |---|---|---|
-| `OPENAI_API_KEY`, `OPENAI_BASE_URL` | Whisper speech-to-text and GPT chat | `https://api.openai.com/v1` |
-| `HEYMIRO_LLM_BASE_URL`, `HEYMIRO_LLM_API_KEY` | optional separate route for chat only | falls back to `OPENAI_*` |
-| `HEYMIRO_STT_BASE_URL`, `HEYMIRO_STT_API_KEY` | optional separate route for transcription only | falls back to `OPENAI_*` |
-| `ELEVENLABS_API_KEY`, `ELEVENLABS_BASE_URL` | text-to-speech (MiRo's voice) | `https://api.elevenlabs.io` |
-| `PICOVOICE_ACCESS_KEY` (+ optional `_HEY_MIRO`, `_DANCE_MIRO`, `_STOP_MIRO`) | wake words (Porcupine) and voice activity detection (Cobra) | — |
-| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_API_BASE_URL`, `SPOTIFY_TOKEN_URL` | optional song lookup | Spotify Web API |
+| `OPENAI_API_KEY` | Whisper speech-to-text and GPT-4o | no conversation |
+| `ELEVENLABS_API_KEY` | MiRo's voice | replies are printed; clips still play |
+| `PICOVOICE_ACCESS_KEY` | Porcupine wake words and Cobra VAD | no wake words (use the command topic); energy VAD |
+| `PICOVOICE_ACCESS_KEY_HEY_MIRO`, `_DANCE_MIRO`, `_STOP_MIRO` | per-wake-word keys, if the `.ppn` files came from different Picovoice accounts | falls back to `PICOVOICE_ACCESS_KEY` |
+| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | optional song lookup (`features.spotify: true`) | the bundled song list is used |
+| `OPENAI_BASE_URL`, `HEYMIRO_LLM_BASE_URL` / `_API_KEY`, `HEYMIRO_STT_BASE_URL` / `_API_KEY`, `ELEVENLABS_BASE_URL` | other OpenAI-compatible or ElevenLabs endpoints | the official APIs |
 
-Where a value comes from, highest priority first:
+A missing key switches its feature off with a warning; it never crashes the demo. Format: `KEY=value`, with no
+quotes, no `export`, and comments on their own line only.
 
-1. environment variables
-2. the file named by `HEYMIRO_SECRETS_FILE` (set by `run_docker.bash`)
-3. `~/.config/heymiro/secrets.env`
+**How the keys are kept safe:**
 
-An empty value counts as unset.
+- The file lives outside git (`*.env` is ignored) and is mounted **read-only** at `/run/secrets/heymiro.env`.
+- It is never baked into the image, passed with `-e`, put on the ROS parameter server or printed. The status
+  banner shows key *names* only.
+- CI runs a gitleaks secret scan on every push.
+- **The old public image `aung9htet/ros_miro:public` had API keys hard-coded in its source.** Revoke and
+  re-create those OpenAI, ElevenLabs, Picovoice and Spotify keys, and make that image private or delete it.
+- Never run the launch scripts with `bash -x`, because it prints environment values.
 
-**Changing a route** means editing one line and restarting the demo; no code changes are needed. Some examples:
+---
 
-```bash
-# a local OpenAI-compatible LLM server (e.g. vLLM or Ollama), keeping OpenAI for Whisper
-HEYMIRO_LLM_BASE_URL=http://192.168.0.10:11434/v1
-HEYMIRO_LLM_API_KEY=none
-# Azure OpenAI (v1-compatible endpoint)
-OPENAI_BASE_URL=https://<resource>.openai.azure.com/openai/v1
-```
+## 6. Run in the simulator
 
-Model names, voice ids and the persona are not secret. They live in `config/heymiro.yaml` and `config/persona.md`.
+The Gazebo simulator has no microphones or speaker. `run.sh --sim` therefore starts `tools/host_audio_bridge.py`.
+It publishes your **PC's microphone** on `/miro/host/mics` in MiRo's microphone format, and MiRo speaks through
+your **PC's speaker** (PulseAudio is passed into the container). **Wear headphones.**
 
-**When a key is missing, that feature switches off with a one-line warning:**
-
-| Missing key | What happens |
-|---|---|
-| No OpenAI key | A wake word gives an attention reaction and a clip instead of a conversation. |
-| No ElevenLabs key | Replies are printed and a pre-recorded clip is played. |
-| No Picovoice key | Use the command topic instead: `rostopic pub -1 /miro/core/forebrain/command std_msgs/String "data: 'dance'"`. |
-
-The `.ppn` wake-word files in `assets/wakewords/` only work with the Picovoice account that trained them. Train
-your own "Hey MiRo" at https://console.picovoice.ai if you use a different account.
-
-> **Security note.** The keys that were hardcoded in the old demo code (and therefore inside the public
-> `aung9htet/ros_miro:public` image) must be treated as leaked and **rotated**. See [docs/security.md](docs/security.md).
-> CI runs a secret scanner on every push.
-
-## Running the Docker container
+**1. Open a simulator terminal** in the container. Add `--offline` to start the local models first, or `--online`
+to use the cloud:
 
 ```bash
-# physical robot: find MiRo's IP address in the MiRo app
-./docker/run_docker.bash --robot-ip 192.168.0.42
-
-# Gazebo simulator
-./docker/run_docker.bash --sim
+docker/run_docker.bash --sim --offline
 ```
 
-`run_docker.bash` does the following:
+The first call creates the long-lived container `heymiro`. The prompt shows `(heymiro:sim/local)`, followed by a
+status box listing the mode, the ROS addresses, the GPU, audio, the AI pipeline and which secrets are set.
 
-- Finds the repository by itself, so there is no path to edit.
-- Mounts `src/cloud_demo_robot` and `src/cloud_demo_sim` at `/root/mdk/catkin_ws/src/`.
-- Mounts the secrets file read-only.
-- Passes through your display (for Gazebo), PulseAudio (for the microphone and speaker) and, if available, the GPU.
-- Sets up ROS networking for the chosen mode. It sets `ROS_MASTER_URI` to the robot and detects your own `ROS_IP`,
-  so there is no need to edit `~/mdk/share/config/setup.bash` any more.
-
-Run the same command again to open **another terminal** in the running container. To work in VS Code, use
-*Dev Containers: Attach to Running Container…* and pick `heymiro`.
-
-Edit the code on the host or in the container; both see the same files. Commit and push from the host as usual.
-The container is started with `--rm`: anything you install inside it is lost when it stops. To add a dependency,
-change `docker/requirements.txt` or `docker/Dockerfile` in a pull request, and CI rebuilds the image. This
-replaces the old `save_docker.bash`.
-
-Other options:
-
-- `--gpu off`: don't pass the GPU through.
-- `--image heymiro-env:local`: use an image you built yourself.
-- `--no-x11`: run without a display.
-- `--secrets FILE`: use a different secrets file.
-
-See `--help` for the full list.
-
-## Running the MiRo demo
-
-### On the physical robot
-
-1. Turn the MiRo on and connect it to the same network as your computer. Find its IP address in the MiRo app.
-2. **Turn OFF demo mode in the MiRo app.** Otherwise the robot's own demo and this one fight over the motors.
-3. Start the container with `./docker/run_docker.bash --robot-ip <IP>`, then:
-
-   ```bash
-   cd ~/mdk/catkin_ws/src/cloud_demo_robot
-   ./run_robot.sh              # MiRo's own microphones (quiet rooms)
-   ./run_robot.sh --ext-mic    # this computer's / an external microphone (noisy rooms)
-   ```
-
-`run_robot.sh` starts the same processes the MiRo runs on board: the camera clients (`- caml`, `- camr`), the
-sound localisation client (`- mics`), the new scene client (`- scene`) and the main client. Logs go to
-`~/.ros/heymiro/<date>/`. Press Ctrl-C to stop everything.
-
-Say **"Hey MiRo"**. MiRo turns towards you (if you hold up an AprilTag), leans in and listens. It replies, and
-keeps listening until nobody has spoken for about 3 s. Ask it to spin, move its ears, do an impression, dance
-("can you dance to Dancing Queen?"), "do some tricks" (show it hand signs), or "guess what this is" (show it an
-object). Say **"Dance MiRo"** to dance straight away, and **"Stop MiRo"** to stop.
-
-Speech plays on this computer's speaker by default. Put a Bluetooth speaker next to MiRo, as in the HRI '25 demo,
-or set `voice.backend: miro` in `config/heymiro.yaml` to use MiRo's own speaker.
-
-### In the Gazebo simulator
+**2. Start Gazebo and MiRo's brain** inside the container:
 
 ```bash
-./docker/run_docker.bash --sim
-cd ~/mdk/catkin_ws/src/cloud_demo_sim
-./run_sim.sh
+$HEYMIRO_DIR/run.sh --sim
 ```
 
-`run_sim.sh` does the following:
+`run.sh` does the following:
 
-1. Starts `roscore` and the MDK Gazebo simulator.
-2. Starts `tools/host_audio_bridge.py`. This publishes your microphone on **`/miro/host/mics`**, in exactly the
-   format of MiRo's own `/miro/sensors/mics` (4 channels × 500 samples at 20 kHz). It also plays
-   `/miro/control/stream` on your speaker.
-3. Starts the demo clients.
+1. checks the keys or the local services and prints a short **pre-flight** report;
+2. starts `roscore` and Gazebo;
+3. waits for the simulated MiRo;
+4. starts the mic bridge;
+5. starts the camera, sound and scene clients, then the main client.
 
-Talk to the simulated MiRo through your laptop microphone. Wearing headphones avoids MiRo hearing itself. See
-[docs/simulation.md](docs/simulation.md).
+After 20–60 s the 3D window opens and you see `[forebrain] local llm service ready`. Keep this terminal open.
 
-### Without any keys
+**3. Talk to it.** Say **"Hey MiRo!"**, then talk normally. Things to try:
+
+- "What's your favourite band?"
+- "Can you spin around?"
+- "Wiggle your ears!"
+- "Do your Mickey Mouse impression!"
+- "Can you dance to Dancing Queen?"
+- **"Dance MiRo!"**
+- **"Stop MiRo!"**
+
+If nobody speaks for about 3 s, MiRo says goodbye and goes back to exploring.
+
+**Stop:** press **Ctrl+C** (this stops everything `run.sh` started). Then `exit`, and run
+`docker/local-ai/up.bash --down` to free the GPU. `docker/run_docker.bash --stop` removes the container.
+
+Simulator options: `--no-gazebo` (use a simulator you started yourself), `--no-bridge` (e.g. for the
+[fake user](#10-test-harness)), `--no-speaker`, `--device DEV` (pick the microphone), `--no-cameras`,
+`--no-scene`, and `-- ARGS` (passed on to `~/mdk/sim/launch_sim.sh`). In the simulator the following are off:
+orienting to sound (a mono PC mic has no direction), touch from the microphones, and AprilTag facing (see
+`config/platform/sim.yaml`).
+
+---
+
+## 7. Run on the robot
+
+**Prepare the robot (every time):**
+
+1. Switch MiRo on and connect it to the same Wi-Fi as the computer.
+2. In the MiRo app, note **MiRo's IP address** (e.g. `192.168.0.42`).
+3. In the MiRo app, **turn Demo mode OFF**. Otherwise MiRo's on-board demo fights this one for the motors.
+   `run.sh` warns if it finds one running.
+4. Connect a speaker to the **computer** and choose it in *Settings → Sound → Output*. MiRo's own speaker also
+   works, but it is quiet: add `voice.backend=miro` to `HEYMIRO_SET`, see [Configuration](#9-configuration).
+
+**1. Open a robot terminal**, with your MiRo's IP address:
+
+```bash
+docker/run_docker.bash --robot-ip 192.168.0.42 --offline      # or --online
+```
+
+The ROS master is the robot itself (`ROS_MASTER_URI=http://<MiRo IP>:11311`). The computer's own address
+(`ROS_IP`) is found automatically from the route to the robot; set it with `--host-ip IP` if that fails. The
+prompt shows `(heymiro:robot/local)`.
+
+**2. Start MiRo's brain** inside the container:
+
+```bash
+$HEYMIRO_DIR/run.sh --robot              # MiRo's own microphones (quiet rooms)
+$HEYMIRO_DIR/run.sh --robot --ext-mic    # the computer's / a USB microphone (noisy rooms, as at the HRI demo)
+```
+
+**3. Talk to it.** Stand in front of MiRo and say **"Hey MiRo!"**. If you hold up an AprilTag, MiRo turns
+towards you, leans in and listens. Try everything from the simulator list, plus:
+
+- "Do some tricks!" (then show hand signs: open palm, pointing up, victory, "I love you");
+- "Guess what I'm holding!" (hold an object up to MiRo's camera).
+
+Stroking MiRo's head or back makes it happy, and scratching its ears or tail makes it say "Ouch!".
+
+For richer conversation on the robot (Gazebo is not using the GPU), use `--offline 9b` after
+`download_models.bash --9b`. In our tests it picked actions no better than 4B, and it answers ~0.25 s slower.
+
+---
+
+## 8. Switching: offline/online, simulator/robot
+
+The design follows `MiRo_CAVAA_integration`:
+
+- **one long-lived container** is shared by every terminal;
+- **the platform is chosen per terminal** (`docker exec -e MIRO_MODE=...`), so you never restart the container to
+  switch;
+- `heymiro_env.bash` derives `ROS_MASTER_URI` / `ROS_IP` for that terminal.
+
+| To switch | Do | What changes |
+|---|---|---|
+| **Simulator → robot** | open a new terminal with `docker/run_docker.bash --robot-ip IP`, then `run.sh --robot` | ROS master moves to the robot; `config/platform/robot.yaml` is used |
+| **Robot → simulator** | open a new terminal with `docker/run_docker.bash --sim`, then `run.sh --sim` | local roscore + Gazebo; `config/platform/sim.yaml` is used |
+| **Offline → online** | `run.sh --online` (or open the terminal with `--online`) | `ai.provider=cloud`: OpenAI, ElevenLabs, Picovoice |
+| **Online → offline** | `run.sh --offline` (or open the terminal with `--offline`, which also starts the services) | `ai.provider=local`: docker/local-ai |
+| **Make one the default** | set `ai.provider: local` or `cloud` in `src/heymiro/config/heymiro.local.yaml` | applies to every run without a flag |
+
+How the flags get through:
+
+- `run_docker.bash --offline/--online` exports `HEYMIRO_PROVIDER` into the terminal.
+- `run.sh --offline/--online` overrides that, and appends `ai.provider=...` to `HEYMIRO_SET`.
+- With neither flag, `ai.provider` in `config/heymiro.yaml` applies (**`local`**).
+
+`run.sh` refuses to start the simulator in a robot terminal, or the other way round, and tells you which command
+opens the right one.
+
+The **platform overlay** (`src/heymiro/config/platform/<robot|sim>.yaml`) holds the only settings that differ:
+
+| Setting | Robot | Simulator |
+|---|---|---|
+| `hearing.input_topic`, `salience_topic` | `sensors/mics` (MiRo's ears; `--ext-mic` → `host/mics`) | `host/mics` (the PC mic bridge) |
+| `mdk.demo_flags` | `vx` (MiRo's hum off, AprilTag responses off) | `vxS` (also: no orienting to sound) |
+| `hearing.self_hearing_guard_s` | 0.3 s | 0.6 s (the PC speaker is close to the PC mic) |
+| `hearing.touch_from_mics` | true (ear/tail scratch from mic noise) | false |
+| `converse.face_user` | `apriltag` | `none` |
+| `scene.rate_hz` | 5 | 1 (leave CPU for Gazebo) |
+
+At start-up, `client_demo.py` also checks the simulator flag in `sensors/package` and warns if it doesn't match
+`platform`.
+
+---
+
+## 9. Configuration
+
+All settings are in `src/heymiro/config/heymiro.yaml`, with comments. Later sources win:
+
+1. `config/heymiro.yaml`: shared settings, with robot defaults.
+2. `config/platform/<robot|sim>.yaml`: chosen by `run.sh --robot/--sim`, i.e. `$HEYMIRO_PLATFORM`, else
+   `$MIRO_MODE`, else robot.
+3. `config/heymiro.local.yaml`: your personal tweaks (gitignored); only the keys you change.
+4. The YAML file named by `$HEYMIRO_CONFIG`.
+5. `$HEYMIRO_SET="a.b=c;d.e=f"`: one-off overrides, e.g.
+   `HEYMIRO_SET="voice.backend=miro" $HEYMIRO_DIR/run.sh --robot`.
+
+With `ai.provider: local`, the values in `ai.local.settings` replace the cloud `llm` / `stt` settings.
+
+| Most-used keys | Default | Meaning |
+|---|---|---|
+| `ai.provider` | `local` | `local` (offline) or `cloud` (online) |
+| `ai.local.wake_word`, `vad`, `end_of_turn` | `asr`, `silero`, `smart_turn` | offline listening stack (`porcupine` / `cobra` / `silence` bring back the HRI '25 behaviour) |
+| `ai.local.voice`, `pitch`, `speed` | `af_heart`, 1.15, 1.05 | MiRo's Kokoro voice |
+| `ai.scene_context` | true | while talking, YOLO tells the LLM (as text) what the camera sees |
+| `features.*` | | switch behaviours on or off: `conversation`, `wake_word`, `dance`, `tricks`, `identify`, `touch_reactions`, `purr`, `sleep_command`, `spotify`, `log_transcripts` |
+| `voice.backend`, `device`, `volume` | `host`, default, 1.0 | `host` = the PC speaker; `miro` = MiRo's own speaker (8 kHz) |
+| `hearing.end_silence_s`, `no_speech_timeout_s` | 3.0, 3.0 | silence that ends an utterance (online) and that ends the conversation |
+| `llm.model`, `tts.voice_id` | `gpt-4o`, ElevenLabs voice | online models |
+| `llm.event_name` | the Festival of Mind | inserted into the persona |
+| `scene.device`, `yolo_weights` | `auto`, `yolov10m.pt` | YOLO on GPU/CPU |
+
+Other files in `config/`:
+
+- `persona.md`: MiRo's personality.
+- `clips.yaml`: the pre-recorded voice clips.
+- `songs.yaml`: the songs MiRo can dance to, with title, artist, aliases, bpm and genre.
+
+**Commands without speaking**, from a second terminal:
 
 ```bash
 rostopic pub -1 /miro/core/forebrain/command std_msgs/String "data: 'dance abba'"
-rostopic pub -1 /miro/core/forebrain/command std_msgs/String "data: 'stop'"
 ```
 
-Dancing to the bundled songs, tricks, touch reactions and the stock MiRo behaviours all work without any cloud
-keys.
+The available commands:
 
-## Configuration
+| Command | MiRo does |
+|---|---|
+| `converse` | starts a conversation |
+| `dance [song]` | dances, to that song if you name one |
+| `tricks` | does tricks |
+| `identify` | plays the object game |
+| `say TEXT` | says the words |
+| `stop` | stops everything |
 
-All settings are in `config/heymiro.yaml`, with comments; every key is described in
-[docs/configuration.md](docs/configuration.md). Put personal tweaks in `config/heymiro.local.yaml`, which git
-ignores. The robot and sim copies differ only in this file.
+---
 
-## Troubleshooting
+## 10. Test harness
 
-- **No sound or microphone in the container.**
-  - Run `pactl info` inside the container, and `python3 tools/mic_check.py --list`.
-  - The host needs PulseAudio or PipeWire-pulse.
-  - `run_docker.bash` mounts `$XDG_RUNTIME_DIR/pulse/native`.
-- **Topics are visible but MiRo ignores commands.** `ROS_IP` is wrong. Start the container with
-  `--host-ip <your IP>`.
-- **The wake word never triggers.**
-  - The `.ppn` files and the Picovoice key must come from the same account.
-  - Check the levels with `python3 tools/mic_check.py --topic sensors/mics`.
-- **Gazebo is slow without a GPU.** Install the NVIDIA toolkit, or set `LIBGL_ALWAYS_SOFTWARE=1` and be patient.
-- **Spotify returns 403.** Spotify closed its audio-analysis API to new apps. Tempos for the bundled songs are in
-  `config/songs.yaml`, and Spotify is off by default.
-- **Files created in the container are owned by root.** Run `sudo chown -R $USER src/` on the host.
+![Figure 5: the test harness](docs/figures/fig5_harness.png)
 
-## Development
+**Figure 5. What each level of the test harness covers**, against the stages of the pipeline (Figure 2).
 
-- Code style follows the MiRo MDK: tabs, `node_*.py` nodes with `tick()`, and actions with
-  `compute_priority/start/service/stop`. See the project README for how to add actions and nodes.
-- Tests run without ROS:
+The harness tests at three levels:
 
-  ```bash
-  cd src/cloud_demo_robot && python3 -m unittest discover -s tests
-  ```
+1. **Each stage** (`bench_pipeline.py`).
+2. **The language model** (`eval_dialogue.py`).
+3. **The whole robot** (`fake_user.py`).
 
-- After changing shared code, copy it to the other project with `python3 tools/check_copies.py --fix-from robot`.
-  CI fails if the copies differ.
+The test speech is synthesised with a different Kokoro voice from MiRo's, so the right answer is always known.
+`fake_user.py` publishes on `host/mics` in MiRo's microphone format, so the robot runs its real pipeline. It waits
+for MiRo's dialogue state before each line, like a person would.
 
-## Citation
+All of these run inside the container (`cd $HEYMIRO_DIR`).
+
+| What | Command | Needs |
+|---|---|---|
+| **Unit tests** (~300; ROS, keys, GPU and audio are stubbed) | `python3 -m unittest discover -s tests` | nothing |
+| **Pre-flight**: platform, pipeline, missing keys, local services | `python3 tools/preflight.py` (run automatically by `run.sh`) | — |
+| **LLM evaluation**: 40 scripted messages through the real prompt, schema and parser; JSON validity, action precision/recall/F1, latency | `python3 tools/eval_dialogue.py` (`--repeat N`, `--json out.json`) | offline services, or `HEYMIRO_SET=ai.provider=cloud` + keys |
+| **End-to-end fake user**: a Kokoro voice talks to MiRo over `host/mics` (wake → question → spin → dance → stop) and prints how fast MiRo reacted | terminal 1: `./run.sh --sim --no-bridge`; terminal 2: `python3 tools/fake_user.py --play` | offline services, simulator |
+| **Stage benchmarks**: VAD, turn, wake, STT, LLM, TTS, YOLO and gesture, with added noise | `python3 tools/bench_pipeline.py --only stt,llm` | offline services |
+| **Microphone check**: level meter, recording, offline wake-word test | `python3 tools/mic_check.py --topic host/mics` | a microphone |
+| **Environment smoke test** (image build) | `docker/build_image.bash --test` | — |
+
+Typical results on an RTX 4070 Ti, offline version:
+
+- `eval_dialogue.py`: 40/40 valid JSON, F1 ≈ 0.98, ~0.45 s to the first sentence.
+- `fake_user.py`: MiRo reacts 0.4–1.8 s after the user stops speaking.
+
+CI (`.github/workflows/ci.yml`) runs the unit tests on Python 3.8, shellcheck, a build of the local-AI speech
+image and the secret scan. `docker-image.yml` builds and publishes the environment image when `docker/` changes.
+
+---
+
+## 11. Repository layout
+
+```
+README.md                    this guide
+config/secrets.env.example   template for API keys (online version); copy it to ~/.config/heymiro/secrets.env
+docker/
+  Dockerfile, build_image.bash   the environment image (ROS Noetic, MiRo MDK, Gazebo, Python packages)
+  run_docker.bash                open a terminal in the container: --sim | --robot-ip IP, --offline | --online
+  heymiro_env.bash               per-terminal ROS network setup (bind-mounted), status banner
+  entrypoint.sh, smoke_test.sh, asound.conf, requirements.txt, constraints.txt, mdk/
+  local-ai/                      the offline models: compose.yaml (+ compose.cpu.yaml), up.bash,
+                                 download_models.bash, models.env (pinned revisions), speech/ (Whisper, Kokoro, smart-turn)
+docs/TECHNICAL.md            how every stage works, models, prompt design, benchmarks, HRI '25 parity
+src/heymiro/                 the demo (bind-mounted at /root/mdk/catkin_ws/src/heymiro = $HEYMIRO_DIR)
+  run.sh                     launcher: --sim | --robot, --offline | --online
+  config/                    heymiro.yaml, platform/{robot,sim}.yaml, persona.md, clips.yaml, songs.yaml
+  core/                      MDK demo brain + forebrain: client_demo.py, node_*.py, action/, forebrain/,
+                             choreography/, cloud/ (LLM, STT, TTS clients for both versions), heymiro_config.py
+  assets/                    voice clips, songs, wake words (.ppn), gesture model
+  tools/                     host_audio_bridge.py, preflight.py, fake_user.py, eval_dialogue.py,
+                             bench_pipeline.py, mic_check.py, make_clip.py, estimate_bpm.py, demo_launch.bash
+  tests/                     unit tests
+```
+
+**What changed from `main`.** `main` has a `docker_file/` folder whose `run_docker.bash` hard-codes a host path.
+There, the code lived inside the public `aung9htet/ros_miro:public` image, `docker commit` saved changes, and the
+API keys were in the source. This version changes that:
+
+- the code lives in git and is bind-mounted into the container;
+- the keys are in a read-only secrets file;
+- the separate robot and simulator copies of the code are now one package, with a platform overlay;
+- the offline pipeline (local models) has been added.
+
+---
+
+## 12. Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `permission denied ... docker.sock` | Log out and back in after `usermod -aG docker`. |
+| `WARNING: Docker cannot use an NVIDIA GPU` / answers take ~15 s | Install the NVIDIA Container Toolkit, then `sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker`. Check with `docker run --rm --gpus all ubuntu nvidia-smi`. |
+| `no models yet` | Run `docker/local-ai/download_models.bash`. |
+| Pre-flight: `local llm NOT reachable` | Start the services: `docker/local-ai/up.bash` (or open the terminal with `--offline`). |
+| Pre-flight: `conversation disabled: OPENAI_API_KEY not set` | Online version without keys: fill in `~/.config/heymiro/secrets.env`, then `docker/run_docker.bash --stop` and open the terminal again (the file is mounted when the container is created). |
+| `this shell is set up for the sim` (or robot) | Open a terminal for the other platform: `docker/run_docker.bash --robot-ip IP` or `--sim`. |
+| `cannot reach the ROS master at http://<IP>:11311` | MiRo is off, on another network, or has a new IP. Check the app, then open a terminal with the new `--robot-ip`. |
+| Robot topics are listed but no data arrives | `ROS_IP` is wrong (e.g. a Docker bridge address): open the terminal with `--host-ip <this PC's Wi-Fi IP>`. |
+| MiRo doesn't react to "Hey MiRo" | Check *Settings → Sound → Input*. `python3 tools/mic_check.py --topic host/mics` shows the level; `--device` picks another microphone. |
+| MiRo talks to itself | Use headphones (simulator), or `--ext-mic` with a close microphone. Or use PulseAudio's `module-echo-cancel` and pass its source with `--device`. |
+| No 3D window | Run `xhost +SI:localuser:root` on the host, then `docker/run_docker.bash --stop` and start again. |
+| MiRo gets sleepy or backs away from phantom cliffs in Gazebo | Add `s` or `cu` to `mdk.demo_flags` in `heymiro.local.yaml`. |
+| MiRo and the on-board demo fight | Turn Demo mode off in the MiRo app. |
+| `pull access denied` for the image | Log in to ghcr.io (see [Setup](#3-setup-once-per-computer)), or build it: `docker/build_image.bash`. |
+| Anything else | Logs are in the container under `~/.ros/heymiro/<date>/` (`main.log`, `scene.log`, `gazebo.log`, ...). |
+
+---
+
+## 13. Citation and credits
 
 ```bibtex
 @inproceedings{htet2025heymiro,
@@ -344,9 +580,9 @@ ignores. The robot and sim copies differ only in this file.
 }
 ```
 
-## Licence and credits
-
-- The demo code in `core/` is derived from the MiRo MDK demo by Consequential Robotics. Those files keep their
-  original licence headers, and the MDK itself is installed into the image rather than stored here.
+- The demo code in `src/heymiro/core/` is derived from the MiRo MDK demo by Consequential Robotics. Those files
+  keep their original licence headers. The MDK itself is installed into the image, not stored here; don't commit
+  `docker/mdk/*.tgz`.
 - The voice clips were generated with ElevenLabs for this project.
-- The bundled songs belong to their respective rights holders and are included for research demonstrations only.
+- The bundled songs belong to their rights holders and are included for research demonstrations only.
+- The offline models keep their own licences (see [Offline setup](#4-offline-setup-local-models)).

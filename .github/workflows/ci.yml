@@ -1,6 +1,6 @@
-# Checks for the two project copies: Python 3.8 unit tests, byte-compile,
-# tab indentation (MDK style), robot/sim copies in sync, shell scripts, and
-# a secret scan so API keys never reach the repository again.
+# Checks for src/heymiro: Python 3.8 unit tests, byte-compile, tab
+# indentation (MDK style), shell scripts, the local AI services, and a
+# secret scan so API keys never reach the repository again.
 
 name: ci
 
@@ -16,10 +16,6 @@ jobs:
   unit-tests:
     runs-on: ubuntu-latest
     container: python:3.8-slim
-    strategy:
-      fail-fast: false
-      matrix:
-        project: [cloud_demo_robot, cloud_demo_sim]
     steps:
       - uses: actions/checkout@v4
       - name: Install test dependencies
@@ -27,25 +23,19 @@ jobs:
           apt-get update && apt-get install -y --no-install-recommends ffmpeg
           pip install --quiet numpy==1.24.4 pyyaml requests "openai>=1.55.3,<2" pvporcupine==3.0.4 pvcobra==2.0.4
       - name: Byte-compile and check indentation
-        working-directory: src/${{ matrix.project }}
+        working-directory: src/heymiro
         run: |
           python -m compileall -q core tools tests
           python -m tabnanny core tools tests
       - name: Unit tests
-        working-directory: src/${{ matrix.project }}
+        working-directory: src/heymiro
         run: python -m unittest discover -s tests -v
-
-  copies-in-sync:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: python3 tools/check_copies.py
 
   shellcheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck -x docker/*.sh docker/*.bash docker/local-ai/*.bash src/*/run_*.sh src/*/tools/*.bash
+      - run: shellcheck -x docker/*.sh docker/*.bash docker/local-ai/*.bash src/heymiro/run.sh src/heymiro/tools/*.bash
 
   local-ai:
     # the local AI services: compose file valid, speech service builds and

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="290" viewBox="0 0 1000 290" font-family="Helvetica, Arial, 'Liberation Sans', sans-serif">
+<defs><marker id="ah222222" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#222222"/></marker></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<rect x="22.0" y="92.0" width="118.0" height="44.0" rx="22" fill="#f1f1f1" stroke="#8c8c8c" stroke-width="1.3"/>
+<text x="81.0" y="119.0" font-size="11" font-weight="bold" text-anchor="middle" fill="#222222">IDLE</text>
+<text x="81.0" y="153.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b">explores as</text>
+<text x="81.0" y="164.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b">stock MiRo</text>
+<rect x="188.0" y="92.0" width="118.0" height="44.0" rx="22" fill="#e6effa" stroke="#2c64ad" stroke-width="1.3"/>
+<text x="247.0" y="119.0" font-size="11" font-weight="bold" text-anchor="middle" fill="#222222">FACING</text>
+<text x="247.0" y="153.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b">turns to find</text>
+<text x="247.0" y="164.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b">the user</text>
+<rect x="354.0" y="92.0" width="118.0" height="44.0" rx="22" fill="#e6effa" stroke="#2c64ad" stroke-width="1.3"/>
+<text x="413.0" y="119.0" font-size="11" font-weight="bold" text-anchor="middle" fill="#222222">GREETING</text>
+<text x="413.0" y="153.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b">greeting clip,</text>
+<text x="413.0" y="164.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b">ears perk up</text>
+<rect x="520.0" y="92.0" width="118.0" height="44.0" rx="22" fill="#e6effa" stroke="#2c64ad" stroke-width="1.3"/>
+<text x="579.0" y="119.0" font-size="11" font-weight="bold" text-anchor="middle" fill="#222222">LISTENING</text>
+<text x="579.0" y="153.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b">nods at speech</text>
+<text x="579.0" y="164.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b">onset</text>
+<rect x="686.0" y="92.0" width="118.0" height="44.0" rx="22" fill="#e6effa" stroke="#2c64ad" stroke-width="1.3"/>
+<text x="745.0" y="119.0" font-size="11" font-weight="bold" text-anchor="middle" fill="#222222">THINKING</text>
+<text x="745.0" y="153.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b">"Hmm" clip,</text>
+<text x="745.0" y="164.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b">waiting tune</text>
+<rect x="852.0" y="92.0" width="118.0" height="44.0" rx="22" fill="#e6effa" stroke="#2c64ad" stroke-width="1.3"/>
+<text x="911.0" y="119.0" font-size="11" font-weight="bold" text-anchor="middle" fill="#222222">RESPONDING</text>
+<text x="911.0" y="153.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b">speaks; emotion</text>
+<text x="911.0" y="164.0" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b">pose + lights</text>
+<path d="M 140.0 114.0 L 188.0 114.0" fill="none" stroke="#222222" stroke-width="1.3" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<text x="164.0" y="107.0" font-size="8.2" font-weight="normal" text-anchor="middle" fill="#222222" font-style="italic">"Hey MiRo"</text>
+<path d="M 306.0 114.0 L 354.0 114.0" fill="none" stroke="#222222" stroke-width="1.3" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<text x="330.0" y="107.0" font-size="8.2" font-weight="normal" text-anchor="middle" fill="#222222" font-style="italic">user found</text>
+<path d="M 472.0 114.0 L 520.0 114.0" fill="none" stroke="#222222" stroke-width="1.3" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<text x="496.0" y="107.0" font-size="8.2" font-weight="normal" text-anchor="middle" fill="#222222" font-style="italic">clip ends</text>
+<path d="M 638.0 114.0 L 686.0 114.0" fill="none" stroke="#222222" stroke-width="1.3" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<text x="662.0" y="107.0" font-size="8.2" font-weight="normal" text-anchor="middle" fill="#222222" font-style="italic">end of turn</text>
+<path d="M 804.0 114.0 L 852.0 114.0" fill="none" stroke="#222222" stroke-width="1.3" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<text x="828.0" y="107.0" font-size="8.2" font-weight="normal" text-anchor="middle" fill="#222222" font-style="italic">first sentence</text>
+<path d="M 911.0 92.0 L 911.0 52.0 L 597.0 52.0 L 597.0 92.0" fill="none" stroke="#222222" stroke-width="1.3" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<text x="754.0" y="46.0" font-size="8.4" font-weight="normal" text-anchor="middle" fill="#222222" font-style="italic">reply spoken: listen for the next turn</text>
+<rect x="374.0" y="226.0" width="118.0" height="44.0" rx="22" fill="#e6effa" stroke="#2c64ad" stroke-width="1.3"/>
+<text x="433.0" y="253.0" font-size="11" font-weight="bold" text-anchor="middle" fill="#222222">GOODBYE</text>
+<path d="M 550.0 168.0 L 550.0 248.0 L 492.0 248.0" fill="none" stroke="#222222" stroke-width="1.3" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<text x="544.0" y="218.0" font-size="8.2" font-weight="normal" text-anchor="end" fill="#222222" font-style="italic">no speech for 3 s</text>
+<path d="M 374.0 248.0 L 81.0 248.0 L 81.0 168.0" fill="none" stroke="#222222" stroke-width="1.3" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<text x="227.5" y="242.0" font-size="8.2" font-weight="normal" text-anchor="middle" fill="#222222" font-style="italic">clip ends</text>
+<rect x="832.0" y="226.0" width="148.0" height="44.0" rx="22" fill="#e6effa" stroke="#2c64ad" stroke-width="1.3"/>
+<text x="906.0" y="253.0" font-size="11" font-weight="bold" text-anchor="middle" fill="#222222">SUSPENDED</text>
+<path d="M 956.0 168.0 L 956.0 226.0" fill="none" stroke="#222222" stroke-width="1.3" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<text x="950.0" y="204.0" font-size="8.2" font-weight="normal" text-anchor="end" fill="#222222" font-style="italic">dance / tricks /</text>
+<text x="950.0" y="215.0" font-size="8.2" font-weight="normal" text-anchor="end" fill="#222222" font-style="italic">identify requested</text>
+<path d="M 832.0 248.0 L 618.0 248.0 L 618.0 168.0" fill="none" stroke="#222222" stroke-width="1.3" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<text x="725.0" y="242.0" font-size="8.2" font-weight="normal" text-anchor="middle" fill="#222222" font-style="italic">task ends: "want to keep talking?"</text>
+<text x="14.0" y="22.0" font-size="8.8" font-weight="normal" text-anchor="start" fill="#5b5b5b" font-style="italic">"Stop MiRo" in any state → GOODBYE, then IDLE</text>
+</svg>

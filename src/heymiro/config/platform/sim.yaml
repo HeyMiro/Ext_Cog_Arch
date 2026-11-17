@@ -1,0 +1,28 @@
+# Hey MiRo - MiRo Gazebo simulator (run.sh --sim)
+#
+# Layered over config/heymiro.yaml. Only the settings that differ between
+# the robot and the Gazebo simulator live here (see config/platform/robot.yaml).
+# The simulator has no microphones or speaker: tools/host_audio_bridge.py
+# publishes this computer's microphone on /<robot>/host/mics and MiRo speaks
+# through this computer's speaker (voice.backend: host).
+
+platform: sim
+
+mdk:
+  # v = vocaliser off, x = special (AprilTag) responses off,
+  # S = no orienting to sound (a mono host mic gives no direction).
+  # If the simulated light makes MiRo sleepy add "s"; if phantom cliffs
+  # make it back away add "cu".
+  demo_flags: "vxS"
+
+hearing:
+  input_topic: host/mics        # published by tools/host_audio_bridge.py
+  salience_topic: host/mics     # loudness still drives arousal
+  self_hearing_guard_s: 0.6     # laptop speaker is close to the laptop mic (or use headphones)
+  touch_from_mics: false        # ear/tail scratch detection needs MiRo's own mics
+
+converse:
+  face_user: none               # no AprilTag in the simulated world
+
+scene:
+  rate_hz: 1.0                  # leave CPU for Gazebo

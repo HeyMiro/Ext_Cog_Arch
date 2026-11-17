@@ -1,0 +1,23 @@
+# Hey MiRo - physical MiRo-e (run.sh --robot)
+#
+# Layered over config/heymiro.yaml. Only the settings that differ between
+# the robot and the Gazebo simulator live here (see config/platform/sim.yaml).
+
+platform: robot
+
+mdk:
+  # v = MiRo's own vocaliser off (it would hum over the speech)
+  # x = special (AprilTag) responses off
+  demo_flags: "vx"
+
+hearing:
+  input_topic: sensors/mics     # MiRo's own microphones (run.sh --ext-mic switches to host/mics)
+  salience_topic: sensors/mics  # what the "- mics" client localises (stock behaviour)
+  self_hearing_guard_s: 0.3     # ignore the mics this long after MiRo stops speaking
+  touch_from_mics: true         # ear/tail scratch detection (only valid on sensors/mics)
+
+converse:
+  face_user: apriltag           # turn to the AprilTag the user holds
+
+scene:
+  rate_hz: 5.0

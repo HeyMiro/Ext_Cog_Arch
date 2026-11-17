@@ -8,17 +8,27 @@
 #   MIRO_ROBOT_IP=a.b.c.d   (robot mode) MiRo's IP, from the MiRo app
 #   MIRO_HOST_IP=auto|IP    this computer's IP as seen by the robot (default auto)
 #   MIRO_ROBOT_NAME=miro    robot name used in topic names
+#   HEYMIRO_PROVIDER=local|cloud  (optional) AI pipeline for run.sh: --offline / --online
+#
+# run_docker.bash passes these per terminal (docker exec -e), so one container
+# serves simulator and robot terminals side by side.
 #
 # This replaces editing ROS_MASTER_IP in ~/mdk/share/config/setup.bash.
 # Never use `set -x` here: it would echo environment values.
 
-# ROS + MDK (sources the catkin workspace and sets MIRO_DIR_*)
-# shellcheck disable=SC1091
-source /opt/ros/noetic/setup.bash
-# shellcheck disable=SC1091
-[ -f /root/mdk/setup.bash ] && source /root/mdk/setup.bash
-# shellcheck disable=SC1091
-[ -f /root/mdk/catkin_ws/devel/setup.bash ] && source /root/mdk/catkin_ws/devel/setup.bash
+# ROS + MDK (sources the catkin workspace and sets MIRO_DIR_*). Sourced with
+# NO arguments: catkin's setup.sh hands "$@" to _setup_util.py, so a caller's
+# arguments (e.g. "--help" from the entrypoint's command) would break it.
+_heymiro_source() {
+	local file="$1"
+	shift
+	# shellcheck disable=SC1090
+	[ -f "$file" ] && source "$file"
+}
+_heymiro_source /opt/ros/noetic/setup.bash
+_heymiro_source /root/mdk/setup.bash
+_heymiro_source /root/mdk/catkin_ws/devel/setup.bash
+unset -f _heymiro_source
 
 export MIRO_MODE="${MIRO_MODE:-robot}"
 export MIRO_ROBOT_NAME="${MIRO_ROBOT_NAME:-miro}"
@@ -48,9 +58,13 @@ fi
 export HEYMIRO_CACHE_DIR="${HEYMIRO_CACHE_DIR:-/root/.cache/heymiro}"
 mkdir -p "$HEYMIRO_CACHE_DIR"
 
-# the projects (bind-mounted)
-export HEYMIRO_ROBOT=/root/mdk/catkin_ws/src/cloud_demo_robot
-export HEYMIRO_SIM=/root/mdk/catkin_ws/src/cloud_demo_sim
+# the project (bind-mounted from src/heymiro)
+export HEYMIRO_DIR=/root/mdk/catkin_ws/src/heymiro
+
+# show the mode in interactive prompts: (heymiro:sim) / (heymiro:robot)
+if [ -n "${PS1:-}" ] && [[ "$PS1" != "(heymiro:"* ]]; then
+	PS1="(heymiro:$MIRO_MODE${HEYMIRO_PROVIDER:+/$HEYMIRO_PROVIDER}) $PS1"
+fi
 
 heymiro_status() {
 	# report configuration WITHOUT printing any secret value
@@ -59,6 +73,11 @@ heymiro_status() {
 	echo "  robot name:      $MIRO_ROBOT_NAME"
 	echo "  ROS_MASTER_URI:  ${ROS_MASTER_URI:-unset}"
 	echo "  ROS_IP:          ${ROS_IP:-unset}"
+	case "${HEYMIRO_PROVIDER:-}" in
+		local) echo "  AI pipeline:     offline (local models, docker/local-ai)" ;;
+		cloud) echo "  AI pipeline:     online (OpenAI, ElevenLabs, Picovoice)" ;;
+		*)     echo "  AI pipeline:     ai.provider from config/heymiro.yaml (local = offline)" ;;
+	esac
 	if [ "$MIRO_MODE" = "robot" ] && [ -z "$MIRO_ROBOT_IP" ]; then
 		echo "  WARNING: robot mode but MIRO_ROBOT_IP is not set (run_docker.bash --robot-ip IP)"
 	fi
@@ -79,10 +98,13 @@ heymiro_status() {
 		echo "  secrets set:     ${_heymiro_set:-none}"
 		unset _heymiro_set
 	else
-		echo "  secrets file:    none (cloud features off; see README 'Secrets and API routes')"
+		echo "  secrets file:    none (only needed for the online pipeline; see README)"
 	fi
 	echo
-	echo "  robot: cd \$HEYMIRO_ROBOT && ./run_robot.sh [--ext-mic]"
-	echo "  sim:   cd \$HEYMIRO_SIM && ./run_sim.sh"
-	echo "  more terminals: run docker/run_docker.bash again (attaches with docker exec)"
+	if [ "$MIRO_MODE" = "sim" ]; then
+		echo "  run:  \$HEYMIRO_DIR/run.sh --sim [--offline|--online]"
+	else
+		echo "  run:  \$HEYMIRO_DIR/run.sh --robot [--ext-mic] [--offline|--online]"
+	fi
+	echo "  more terminals: docker/run_docker.bash --sim | --robot-ip IP (same container)"
 }

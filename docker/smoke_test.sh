@@ -59,7 +59,7 @@ kill "$pid"
 wait "$pid" 2>/dev/null || true
 
 echo "== no project code, assets or keys baked in"
-if [ -e /root/mdk/catkin_ws/src/cloud_demo_robot ] || [ -e /root/mdk/catkin_ws/src/cloud_demo_sim ]; then
+if [ -e /root/mdk/catkin_ws/src/heymiro ]; then
 	echo "project folders must be bind-mounted, not baked in"; exit 1
 fi
 if find /root /opt -xdev \( -name '*.ppn' -o -name 'api_key*.txt' -o -name 'secrets.env' \) 2>/dev/null | grep -q .; then
