@@ -30,7 +30,7 @@ The demo runs in **two versions** and on **two platforms**. You choose each with
 7. [Run on the robot](#7-run-on-the-robot)
 8. [Switching: offline/online, simulator/robot](#8-switching-offlineonline-simulatorrobot)
 9. [Configuration](#9-configuration)
-10. [Test harness](#10-test-harness)
+10. [Testing](#10-testing)
 11. [Repository layout](#11-repository-layout)
 12. [Troubleshooting](#12-troubleshooting)
 13. [Citation and credits](#13-citation-and-credits)
@@ -60,6 +60,8 @@ Hey MiRo adds:
 - **P3, a forebrain (blue):**
   - hearing, dialogue and voice;
   - scene awareness;
+  - the **context harness** (offline), which tells the small language model about MiRo's state, recent events
+    and the people it has met;
   - an integration node that turns events into intentions;
   - four new behaviours (converse, dance, tricks, identify).
 - **P4, an off-board layer** of speech and language models.
@@ -77,8 +79,12 @@ versions: local models (offline) or cloud services (online).
 
 - The first three stages run continuously on every 32 ms audio frame. The speech-to-text, LLM and text-to-speech
   stages run once per turn.
-- The LLM also receives a one-sentence description of what MiRo sees, and returns MiRo's emotion and actions with
-  its reply.
+- Every turn, the LLM also receives a context note:
+  - offline, from the [context harness](#the-context-harness-offline): self-state, recent events, scene and
+    memory;
+  - online, the HRI '25 line: affect, time and scene.
+
+  It returns MiRo's emotion and actions along with its reply.
 - The offline version replaces the fixed 3 s silence with a learned end-of-turn model, and streams the reply
   sentence by sentence. This is why it answers in about 1 s instead of 3.5–8 s.
 
@@ -104,6 +110,99 @@ Each stage is implemented differently in the two versions:
 **Figure 3. The dialogue state machine** (`core/forebrain/dialogue.py`). Each state also sets MiRo's pose, lights
 and affect. A dance, trick or object game requested in conversation suspends the dialogue, which resumes when the
 task ends.
+
+### The context harness (offline)
+
+A 4-billion-parameter model knows nothing about the robot it speaks for. It only knows what is in its prompt. The
+**context harness** (`src/heymiro/core/context/`) builds that prompt on every turn. It puts one bracketed note in
+front of the person's words, made from MiRo's own state:
+
+```
+[Now: Monday 17 November 2026, 14:32. You are awake and feeling happy (valence 0.80, arousal 0.70).
+ Recently: you danced to Dancing Queen by ABBA (2 minutes ago); someone scratched your tail (40 seconds ago).
+ Your camera sees: a person in front of you.
+ You remember Sam (you last talked an hour ago): has a dog called Max; loves ABBA. Last time you talked about dogs and ABBA.
+ Choose actions from the upcoming message only, and answer in the JSON format given.]
+Hi MiRo, it's Sam again!
+```
+
+| Section | Comes from | Lets MiRo |
+|---|---|---|
+| **Self-state** | affect (valence, arousal, sleep), the running behaviour | say how it feels and what it is doing |
+| **Recent events** (`context/events.py`) | the forebrain and the behaviours log what the body did: dances (with the song), tricks, the object game, being stroked or scratched, being woken, being told to sleep or stop. When nothing happened, the note says so, so the model does not make something up | answer "what did you just do?" truthfully |
+| **Scene** | YOLO, as one sentence | talk about what it sees |
+| **Memory** (`context/memory.py`) | past conversations, condensed by the SLM itself | greet a returning person by name and remember what they said |
+
+![Figure 5: the context harness](docs/figures/fig5_context_harness.png)
+
+**Figure 5. The context harness.**
+
+- **Left:** where the note's sections come from.
+- **Middle:** how the note is assembled on every turn.
+- **Right:** how one 8,192-token request is divided.
+- **Bottom:** the memory loop that runs once per conversation.
+- **Grey "limit" pills:** every pruning rule.
+
+**How the memory works:**
+
+1. When a conversation ends, the SLM reads the transcript in one extra call. The call is constrained by a JSON
+   schema and runs in the background, so it does not slow MiRo down.
+2. It writes down the person's name, up to 5 facts they said about themselves, and the topics.
+   - It reads only the person's own lines, plus MiRo's question before a short answer such as "Yes, two!".
+   - So MiRo's own likes can never become facts about the person.
+3. Later, if someone says a stored name, that person's record goes into the note for the rest of that
+   conversation.
+4. MiRo cannot recognise faces or voices, so **recall works only by name**. Without a name, MiRo never claims to
+   know someone.
+
+**Design for a small model:**
+
+- The system prompt and the examples stay first and never change, so llama.cpp's prompt cache keeps them. The
+  note comes last and costs only about 100 tokens. Each section has a length cap, and empty sections are left
+  out.
+- The system prompt gets short rules: use the note only when it fits, never read it out, and never claim a memory
+  or an event the note does not contain.
+- The few-shot examples carry notes in the same format, so the model sees its examples in the form it is asked to
+  answer.
+
+**Context budget: the window never overflows, with no extra model calls.** Each request to the SLM has 8,192
+tokens: llama.cpp's `--ctx-size 16384` shared by `--parallel 2`. At start-up, MiRo asks llama.cpp once for this
+size and for the exact size of the fixed prompt (2,184 tokens). After that, every turn only estimates, which is
+instant.
+
+| Part of the request | Budget | How it is kept |
+|---|---|---|
+| System prompt + examples | 2,184 | fixed; prompt-cached |
+| This conversation's history | up to 4,998 | past 16 turns or 4,998 tokens, the oldest turns go **in one step** down to 8 turns |
+| Note | 250 | section caps; if still over, drop scene, then events, then memory |
+| The person's words | 150 | longer transcripts are cut (≈ 30 s of speech) |
+| MiRo's reply | 200 | `llm.max_tokens` |
+
+- **Why trim in one step:** removing one old turn per turn would change the start of the history every turn. The
+  prompt cache would then miss each time, which costs seconds on a CPU. Trimming to 8 turns in one go means one
+  miss per ~8 turns.
+- **Nothing lost to the memory:** the full transcript is kept separately for the memory step, so a name given in
+  turn 1 of a long conversation is still remembered.
+- **Overflow guard:** if the server ever reports an overflow anyway, the history is trimmed and the turn is
+  retried once.
+- **Measured in a 30-turn conversation in Gazebo:** the prompt peaked at ~3,300 of 8,192 tokens, trims happened
+  at turns 17 and 25, and MiRo kept answering in 1.0–1.3 s. Each turn logs its size, e.g.
+  `[context] prompt ~2754 / 8192 tokens (history 8 turns, note 72)`.
+
+**Offline only.** With `--online` the harness is off, and GPT-4o gets exactly the HRI '25 prompt.
+
+**Measured** with `tools/eval_dialogue.py`, 5 rounds on an RTX 4070 Ti:
+
+- The 40 standard cases keep the same quality: 200/200 valid JSON, action F1 0.96 (0.97 without the harness), and
+  ~0.45 s to the first sentence.
+- The context cases pass 30/30: recent event, no invented events, a touch, the scene, a remembered person, and no
+  false memory for a stranger.
+
+**Privacy.** The memory is stored only on this computer, in the `heymiro-cache` Docker volume
+(`/root/.cache/heymiro/memory/memory.json`). People are forgotten after `ai.local.context.memory.ttl_hours`
+(24 h). To erase everything at once, send the `forget` command, or delete the file. To switch memory off, set
+`features.memory: false`. Visitors are often children: keep the time-to-live short and tell people that MiRo
+remembers names for the day.
 
 ### Where it runs
 
@@ -319,7 +418,7 @@ If nobody speaks for about 3 s, MiRo says goodbye and goes back to exploring.
 `docker/local-ai/up.bash --down` to free the GPU. `docker/run_docker.bash --stop` removes the container.
 
 Simulator options: `--no-gazebo` (use a simulator you started yourself), `--no-bridge` (e.g. for the
-[fake user](#10-test-harness)), `--no-speaker`, `--device DEV` (pick the microphone), `--no-cameras`,
+[fake user](#10-testing)), `--no-speaker`, `--device DEV` (pick the microphone), `--no-cameras`,
 `--no-scene`, and `-- ARGS` (passed on to `~/mdk/sim/launch_sim.sh`). In the simulator the following are off:
 orienting to sound (a mono PC mic has no direction), touch from the microphones, and AprilTag facing (see
 `config/platform/sim.yaml`).
@@ -429,7 +528,11 @@ With `ai.provider: local`, the values in `ai.local.settings` replace the cloud `
 | `ai.local.wake_word`, `vad`, `end_of_turn` | `asr`, `silero`, `smart_turn` | offline listening stack (`porcupine` / `cobra` / `silence` bring back the HRI '25 behaviour) |
 | `ai.local.voice`, `pitch`, `speed` | `af_heart`, 1.15, 1.05 | MiRo's Kokoro voice |
 | `ai.scene_context` | true | while talking, YOLO tells the LLM (as text) what the camera sees |
-| `features.*` | | switch behaviours on or off: `conversation`, `wake_word`, `dance`, `tricks`, `identify`, `touch_reactions`, `purr`, `sleep_command`, `spotify`, `log_transcripts` |
+| `features.context`, `features.memory` | true, true | offline only: the [context harness](#the-context-harness-offline) and its memory of people |
+| `ai.local.context.events.max_age_s`, `max_items` | 600, 4 | how far back "Recently: ..." looks |
+| `ai.local.context.memory.ttl_hours`, `max_people`, `max_facts` | 24, 50, 5 | how long and how much MiRo remembers |
+| `ai.local.context.budget.reserve_user`, `reserve_note`, `high_turns`, `low_turns` | 150, 250, 16, 8 | the [context budget](#the-context-harness-offline) (the window size is measured from llama.cpp) |
+| `features.*` | | switch behaviours on or off: `conversation`, `wake_word`, `dance`, `tricks`, `identify`, `touch_reactions`, `purr`, `sleep_command`, `context`, `memory`, `spotify`, `log_transcripts` |
 | `voice.backend`, `device`, `volume` | `host`, default, 1.0 | `host` = the PC speaker; `miro` = MiRo's own speaker (8 kHz) |
 | `hearing.end_silence_s`, `no_speech_timeout_s` | 3.0, 3.0 | silence that ends an utterance (online) and that ends the conversation |
 | `llm.model`, `tts.voice_id` | `gpt-4o`, ElevenLabs voice | online models |
@@ -458,40 +561,36 @@ The available commands:
 | `identify` | plays the object game |
 | `say TEXT` | says the words |
 | `stop` | stops everything |
+| `forget` | erases the context harness's memory of people and recent events |
 
 ---
 
-## 10. Test harness
+## 10. Testing
 
-![Figure 5: the test harness](docs/figures/fig5_harness.png)
+The unit tests guard every module, and three evaluation tools measure the offline pipeline:
 
-**Figure 5. What each level of the test harness covers**, against the stages of the pipeline (Figure 2).
+- one stage at a time (`bench_pipeline.py`);
+- the language model with the context harness (`eval_dialogue.py`);
+- the whole robot in the simulator (`fake_user.py`).
 
-The harness tests at three levels:
-
-1. **Each stage** (`bench_pipeline.py`).
-2. **The language model** (`eval_dialogue.py`).
-3. **The whole robot** (`fake_user.py`).
-
-The test speech is synthesised with a different Kokoro voice from MiRo's, so the right answer is always known.
-`fake_user.py` publishes on `host/mics` in MiRo's microphone format, so the robot runs its real pipeline. It waits
-for MiRo's dialogue state before each line, like a person would.
+The test speech is synthesised with a Kokoro voice that differs from MiRo's, so the right transcript is always
+known.
 
 All of these run inside the container (`cd $HEYMIRO_DIR`).
 
 | What | Command | Needs |
 |---|---|---|
-| **Unit tests** (~300; ROS, keys, GPU and audio are stubbed) | `python3 -m unittest discover -s tests` | nothing |
+| **Unit tests** (~330; ROS, keys, GPU and audio are stubbed) | `python3 -m unittest discover -s tests` | nothing |
 | **Pre-flight**: platform, pipeline, missing keys, local services | `python3 tools/preflight.py` (run automatically by `run.sh`) | — |
-| **LLM evaluation**: 40 scripted messages through the real prompt, schema and parser; JSON validity, action precision/recall/F1, latency | `python3 tools/eval_dialogue.py` (`--repeat N`, `--json out.json`) | offline services, or `HEYMIRO_SET=ai.provider=cloud` + keys |
-| **End-to-end fake user**: a Kokoro voice talks to MiRo over `host/mics` (wake → question → spin → dance → stop) and prints how fast MiRo reacted | terminal 1: `./run.sh --sim --no-bridge`; terminal 2: `python3 tools/fake_user.py --play` | offline services, simulator |
+| **LLM evaluation**: 40 scripted messages through the real prompt, schema and parser; JSON validity, action precision/recall/F1, latency; offline, also 6 context-harness cases (events, scene, memory, no invention) | `python3 tools/eval_dialogue.py` (`--repeat N`, `--json out.json`) | offline services, or `HEYMIRO_SET=ai.provider=cloud` + keys |
+| **End-to-end fake user**: a Kokoro voice talks to MiRo over `host/mics` (wake → question → spin → dance → stop, or your own `--script`) and prints how fast MiRo reacted | terminal 1: `./run.sh --sim --no-bridge`; terminal 2: `python3 tools/fake_user.py --play` | offline services, simulator |
 | **Stage benchmarks**: VAD, turn, wake, STT, LLM, TTS, YOLO and gesture, with added noise | `python3 tools/bench_pipeline.py --only stt,llm` | offline services |
 | **Microphone check**: level meter, recording, offline wake-word test | `python3 tools/mic_check.py --topic host/mics` | a microphone |
 | **Environment smoke test** (image build) | `docker/build_image.bash --test` | — |
 
 Typical results on an RTX 4070 Ti, offline version:
 
-- `eval_dialogue.py`: 40/40 valid JSON, F1 ≈ 0.98, ~0.45 s to the first sentence.
+- `eval_dialogue.py`: 40/40 valid JSON, F1 ≈ 0.96–0.98, ~0.45 s to the first sentence; context cases 6/6.
 - `fake_user.py`: MiRo reacts 0.4–1.8 s after the user stops speaking.
 
 CI (`.github/workflows/ci.yml`) runs the unit tests on Python 3.8, shellcheck, a build of the local-AI speech
@@ -516,7 +615,8 @@ src/heymiro/                 the demo (bind-mounted at /root/mdk/catkin_ws/src/h
   run.sh                     launcher: --sim | --robot, --offline | --online
   config/                    heymiro.yaml, platform/{robot,sim}.yaml, persona.md, clips.yaml, songs.yaml
   core/                      MDK demo brain + forebrain: client_demo.py, node_*.py, action/, forebrain/,
-                             choreography/, cloud/ (LLM, STT, TTS clients for both versions), heymiro_config.py
+                             choreography/, cloud/ (LLM, STT, TTS clients for both versions),
+                             context/ (the SLM context harness: events, memory, per-turn note), heymiro_config.py
   assets/                    voice clips, songs, wake words (.ppn), gesture model
   tools/                     host_audio_bridge.py, preflight.py, fake_user.py, eval_dialogue.py,
                              bench_pipeline.py, mic_check.py, make_clip.py, estimate_bpm.py, demo_launch.bash

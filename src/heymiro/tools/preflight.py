@@ -51,6 +51,13 @@ def main():
 	f = hm.features
 	print("  features:    conversation=%s wake_word=%s tts=%s vad=%s" % (
 		f.get("conversation"), f.get("wake_word"), f.get("tts"), f.get("vad")))
+	if offline:
+		print("  context:     harness=%s memory=%s" % (f.get("context"), f.get("memory")))
+		if f.get("context"):
+			from context.budget import fetch_n_ctx
+			n_ctx = fetch_n_ctx(hm.route("llm").base_url, timeout=args.timeout)
+			if n_ctx:
+				print("  context:     %d tokens per request (llama.cpp --ctx-size / --parallel)" % n_ctx)
 	for w in hm.warnings:
 		print("  note: " + w)
 

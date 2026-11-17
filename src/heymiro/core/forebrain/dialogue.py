@@ -46,8 +46,15 @@
 import queue
 
 from cloud.llm import parse_llm_reply, context_message, ReplyStream
-from cloud.worker import describe_error
+from cloud.worker import describe_error, http_status
 import audio_util
+
+
+def context_overflow(e):
+
+	# llama.cpp: HTTP 400 "the request exceeds the available context size"
+	text = str(e).lower()
+	return http_status(e) == 400 and ("context" in text or "exceed" in text)
 
 
 # states (strings, so they read well in logs and in core/forebrain/state)
@@ -139,7 +146,12 @@ class TurnRunner(object):
 		self.json_mode = bool(cfg.get("llm.json_mode", True))
 		self.impression_voice_id = cfg.get("tts.impression_voice_id", None)
 
-	def __call__(self, pcm16k, valence=None, arousal=None, now_str=None, progress=None, scene=None):
+	def __call__(self, pcm16k, valence=None, arousal=None, now_str=None, progress=None, scene=None, context=None):
+
+		# context: (context.harness.ContextHarness, Snapshot) on the
+		# offline pipeline; the harness writes the whole per-turn note
+		# (self-state, recent events, scene, memory) once the person's
+		# words are known. Without it: the HRI'25-style affect/time/scene line.
 
 		if self.clients is None:
 			raise RuntimeError("conversation is not configured (no OpenAI route)")
@@ -153,11 +165,43 @@ class TurnRunner(object):
 		text = (text or "").strip()
 		if text.lower() in NON_SPEECH:
 			return TurnResult(transcript="")
+		budget = getattr(self.memory, "budget", None)
+		if budget is not None:
+			# the person's words always fit (also stops a long noise transcript)
+			text = budget.cap_user(text)
 
 		# chat (the context message is ephemeral: never stored)
 		# scene: what the camera sees, as one sentence (forebrain/scene_context.py)
-		context = context_message(valence, arousal, now_str, extra=scene)
-		messages = self.memory.messages(self.system_prompt, context, text, self.examples, self.context_in_user)
+		if context is not None:
+			harness, snap = context
+			note = harness.message(snap, text)
+		else:
+			note = context_message(valence, arousal, now_str, extra=scene)
+
+		def build():
+			return self.memory.messages(self.system_prompt, note, text, self.examples, self.context_in_user)
+
+		messages = build()
+		if budget is not None:
+			history = len(self.memory)
+			size = budget.prefix_tokens + budget.messages_tokens(messages[1 + len(self.examples):])
+			if not budget.fits(size):
+				self.memory.trim_to_low()
+				messages = build()
+			print("[context] prompt ~%d / %d tokens (history %d turns, note %d)" % (
+				size, budget.n_ctx, history, budget.estimate(note.get("content", ""))))
+		try:
+			return self._complete(text, messages, progress)
+		except Exception as e:
+			if budget is None or not context_overflow(e):
+				raise
+			# the estimate was off: drop history to the low-water mark, once
+			print("[context] the server reported a context overflow; trimming the history and retrying")
+			self.memory.trim_to_low()
+			return self._complete(text, build(), progress)
+
+	def _complete(self, text, messages, progress):
+
 		if self.stream and progress is not None:
 			return self._streamed(text, messages, progress)
 

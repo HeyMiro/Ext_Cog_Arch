@@ -26,6 +26,7 @@ online, simulator or robot) is in the [README](../README.md). The comparison wit
 17. [Measured results](#17-measured-results)
 18. [MiRo's architecture, processes and threads](#18-miros-architecture-processes-and-threads)
 19. [Parity with the HRI '25 demo (the online pipeline)](#19-parity-with-the-hri-25-demo-the-online-pipeline)
+20. [The context harness for the SLM](#20-the-context-harness-for-the-slm)
 
 ---
 
@@ -1107,3 +1108,162 @@ means something the original did that the refactor broke. One regression was fou
 3. **Old keys.** The old image `aung9htet/ros_miro:public` still contains API keys in its source files
    (`action_llm.py`, `action_dance.py`, `node_detect_word.py`). As the README's "Online setup" says, rotate them, and make the
    image private or delete it.
+
+---
+
+## 20. The context harness for the SLM
+
+`core/context/` (`events.py`, `memory.py`, `harness.py`); wired in `node_forebrain.py` (`make_context`, `note`),
+`node_dialogue.py` (`_submit_turn`, `_end_context`) and `forebrain/dialogue.py` (`TurnRunner`). Offline only:
+`features.context` and `features.memory` are forced off with `ai.provider: cloud`.
+
+### Why a harness
+
+A 4B model has no state between calls. Everything it should "know" must be put into its context on every turn,
+and a small model is more easily confused by context than GPT-4o. The harness decides what goes in, where, and
+how much.
+
+### What the SLM receives
+
+```
+system     persona + emotion rules + action list + reply format + context rules   (fixed: prompt-cached)
+examples   6 user/assistant pairs; each user turn starts with a sample note        (fixed: prompt-cached)
+history    up to 10 user/assistant turns of this conversation                      (grows)
+user       [note] + the person's words                                             (new each turn)
+```
+
+The note puts these sections in this order, and leaves any empty section out:
+
+| Section | Source | Cap |
+|---|---|---|
+| Time | wall clock | — |
+| Self-state | `affect.emotion` (valence, arousal → emotion word via `infer_emotion`), `affect.sleep.wakefulness`, `forebrain.active_task` | — |
+| Recent events | `EventLog.describe()`: newest first, ≤ 4 items within 10 min, repeats merged ("3 times") | 300 chars |
+| Scene | `describe_scene()` (section 11) | 160 chars |
+| Memory | `MemoryStore.describe()` for the person recalled in this conversation | 260 chars |
+| Reminder | "Choose actions from the upcoming message only, ..." | — |
+
+A typical note is 60–110 tokens.
+
+**Timing.** `snapshot()` runs on the 50 Hz tick, because it reads robot state. `note()` runs on the worker after
+speech-to-text, because memory recall needs the person's words. The tick never waits.
+
+**Events recorded:**
+
+| Event | Where |
+|---|---|
+| "you danced to *title* by *artist*", with "until you were told to stop" if stopped | `NodeForebrain.end_task` / `stop_all` |
+| "you played the tricks game" / "the object game" | `NodeForebrain.end_task` |
+| "you did a *spin* when someone showed you a *Pointing Up* hand sign" | `ActionTricks` |
+| "you saw a *cup* in the object game" | `ActionIdentify` |
+| "someone scratched your *ear/tail*", "someone stroked you" | `NodeForebrain._on_touch`, `_petting` |
+| "someone woke you up", "you were asked to go to sleep" | `NodeForebrain.wake`, `NodeDialogue` |
+| "you talked with *Sam*" / "you had a conversation with someone" | `NodeDialogue._end_context` |
+
+### Memory
+
+1. **Consolidation.** When a conversation ends, `ContextHarness.consolidate()` runs on the CloudWorker. It sends
+   the **whole** conversation to the SLM with a fixed prompt and the JSON schema `{name, facts[≤5], summary}`, at
+   temperature 0 and grammar-constrained by llama.cpp.
+   - The whole conversation is kept in `NodeDialogue.transcript`, not the trimmed chat history.
+   - For a long conversation, only the first 4 and the last 8 turns are sent.
+   - What the model sees is **only the person's lines**, plus MiRo's last question before a short answer, e.g.
+     `(MiRo asked: Do you like dinosaurs?) Person: Yes! I have twenty of them.`.
+   - Any "fact" that is really a question ("asks about music") is dropped.
+2. **Storage.** `MemoryStore` keeps people by lower-case name, merging facts newest first without duplicates.
+   Conversations without a name are kept only as anonymous topic episodes and are never recalled.
+   - The file is written atomically, to `$HEYMIRO_CACHE_DIR/memory/memory.json`.
+   - Records expire after `ttl_hours` (24).
+   - At most 50 people are kept; the oldest go first.
+3. **Recall.** If a stored name appears as a whole word in what the person says, that person's record is added to
+   the note for the rest of the conversation. There is no face or voice identity, so there is no recall without a
+   name.
+
+**Why only the person's lines:** measured in a 30-turn conversation where the person (Priya) only asked MiRo
+questions after saying her name and her cat's.
+
+| Input to the summary call | Priya's stored facts |
+|---|---|
+| All lines (person and MiRo) | has a cat called Biscuit, *likes ABBA and Bob Marley, likes spring, likes the number 7* (MiRo's own likes) |
+| Person's lines only | has a cat called Biscuit, *asks about favourite colour, ...* |
+| Person's lines + MiRo's question before a short answer + question filter (used) | has a cat called Biscuit |
+
+The version used also keeps "Yes! I have twenty of them." meaning dinosaurs (Leo: has twenty dinosaurs, favourite
+is T-rex).
+
+### Context window budget
+
+`core/context/budget.py`; `ChatMemory(budget=...)` in `cloud/llm.py`; `TurnRunner` in `forebrain/dialogue.py`.
+
+**One request is 8,192 tokens:** `--ctx-size 16384` shared by `--parallel 2`.
+
+| Part | Tokens | Kept in budget by |
+|---|---|---|
+| System prompt + 6 examples | 2,184 (measured) | fixed; prompt-cached |
+| History of this conversation | ≤ 4,998 | hysteresis trim (below) |
+| Note | ≤ 250 | section caps, then drop scene → events → memory |
+| Person's words | ≤ 150 | the transcript is cut (≈ 30 s of speech) |
+| Reply | ≤ 200 | `llm.max_tokens` |
+| Margin | 5% | — |
+
+- **Measured once, estimated after that.** At start-up, `calibrate()` asks llama.cpp for:
+  - `n_ctx` (`GET /props`);
+  - the exact token count of the templated fixed prefix (`POST /apply-template`, then `/tokenize`), which gives
+    this tokenizer's characters per token (3.8; 3.2 is used, to allow for JSON).
+
+  Every turn then counts tokens as characters ÷ that ratio. There are no model calls and no network calls during
+  a conversation.
+- **Hysteresis.** When the history passes 16 turns or its token budget, `ChatMemory` drops the oldest turns in one
+  step, down to 8 turns and half the budget.
+  - Dropping one turn per turn would change the start of the history every turn, and llama.cpp's prompt cache
+    would re-process the whole history each time: ~50 ms on the GPU, seconds on the CPU.
+  - With hysteresis, the cache misses once per ~8 turns.
+- **The memory is unaffected,** because consolidation reads the separate full transcript.
+- **Guard.** If llama.cpp still answers HTTP 400 "exceeds the available context size", `TurnRunner` trims to the
+  low-water mark and retries once.
+- **Observed** in a 30-turn conversation in Gazebo:
+  - the prompt grew from ~2,277 tokens to a peak of ~3,280;
+  - trims (17 → 8 turns) happened at turns 17 and 25;
+  - reaction times stayed between 0.93 and 1.54 s;
+  - the name from turn 1 was remembered.
+
+![Figure 5: the context harness](figures/fig5_context_harness.png)
+
+**Figure 5.** The context harness: sources, per-turn assembly, how the 8,192-token request is divided, and the
+once-per-conversation memory loop. Pruning rules are marked with grey "limit" pills.
+
+### Measures that keep a small model grounded
+
+- **Context rules** (`CONTEXT_INSTRUCTIONS` in `cloud/llm.py`): the note is not from the person, should be used
+  only when it fits, and must never be read out. The model must never claim a memory or an event the note does
+  not contain.
+- **"Nothing happened" is said explicitly** ("Recently: nothing; you have just been listening."). Without it, the
+  4B model sometimes invented an action when asked "What did you just do?" ("I just wiggled my ears!").
+- **The examples carry notes** (`EXAMPLE_NOTES`). With plain examples but noted live turns, the model stopped
+  matching the "compliment → no action" example. "Your ears are so cute." then triggered an ear wiggle in 5/5
+  runs. With noted examples it was 1/5 (0/5 without the harness).
+
+### Results
+
+`tools/eval_dialogue.py --repeat 5`, Qwen3.5-4B Q4_K_M, RTX 4070 Ti:
+
+| | Harness off | Harness on |
+|---|---|---|
+| Valid JSON, schema order | 200/200 | 200/200 |
+| Action exact / F1 | 194/200, 0.97 | 191–192/200, 0.96 |
+| First sentence, p50 | 0.466 s | 0.451 s |
+| Context cases (events, no invention, touch, scene, remembered person, no false memory) | — | 30/30 |
+
+Most action misses in both columns are the same near miss: "I'm so tired, I want to sleep." → `sleep`.
+
+**End to end in Gazebo** (`fake_user.py --script`, two conversations):
+
+1. Sam introduces themself and their dog, then says "Stop MiRo".
+2. The consolidation stores `Sam: has a dog named Max; loves ABBA`. That run also kept one fact taken from MiRo's
+   own question, so the prompt was tightened to use only the person's lines; re-checked on the same transcript, it
+   now gives exactly those two facts.
+3. In the next conversation, "Hi MiRo, it's Sam again! Do you remember me?" gets "Hi Sam! It's so nice to see you
+   again! How is Max today?".
+
+Reaction times stayed between 0.4 and 1.1 s.
+

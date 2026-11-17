@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="630" viewBox="0 0 1000 630" font-family="Helvetica, Arial, 'Liberation Sans', sans-serif">
+<defs><marker id="ah222222" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#222222"/></marker><marker id="ah2c64ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#2c64ad"/></marker></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<rect x="10.0" y="4.0" width="238.0" height="398.0" rx="8" fill="#fafafa" stroke="#d9d9d9" stroke-width="0.9"/>
+<text x="22.0" y="20.0" font-size="10.5" font-weight="bold" text-anchor="start" fill="#222222">Robot state</text>
+<rect x="258.0" y="4.0" width="274.0" height="398.0" rx="8" fill="#fafafa" stroke="#d9d9d9" stroke-width="0.9"/>
+<text x="270.0" y="20.0" font-size="10.5" font-weight="bold" text-anchor="start" fill="#222222">Every turn</text>
+<rect x="542.0" y="4.0" width="448.0" height="398.0" rx="8" fill="#fafafa" stroke="#d9d9d9" stroke-width="0.9"/>
+<text x="554.0" y="20.0" font-size="10.5" font-weight="bold" text-anchor="start" fill="#222222">One SLM request: 8,192 tokens</text>
+<rect x="10.0" y="412.0" width="980.0" height="132.0" rx="8" fill="#fafafa" stroke="#d9d9d9" stroke-width="0.9"/>
+<text x="22.0" y="428.0" font-size="10.5" font-weight="bold" text-anchor="start" fill="#222222">Once per conversation, after it ends (off the critical path)</text>
+<rect x="22.0" y="34.0" width="214.0" height="62.0" rx="4" fill="#f1f1f1" stroke="#8c8c8c" stroke-width="1.1"/>
+<text x="129.0" y="52.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Self-state</text>
+<text x="129.0" y="67.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">valence, arousal, sleep</text>
+<text x="129.0" y="79.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">the running behaviour</text>
+<rect x="22.0" y="104.0" width="214.0" height="80.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="129.0" y="122.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Recent events</text>
+<text x="129.0" y="137.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">dances, tricks, object game,</text>
+<text x="129.0" y="149.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">touch, woken, told to stop</text>
+<rect x="30.0" y="165.5" width="36.0" height="11.5" rx="5.5" fill="#eeeeee" stroke="#5b5b5b" stroke-width="0.8"/>
+<text x="48.0" y="174.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#5b5b5b">limit</text>
+<text x="72.0" y="174.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b" font-style="italic">10 min · 4 items · merged</text>
+<rect x="22.0" y="192.0" width="214.0" height="70.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="129.0" y="210.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Scene</text>
+<text x="129.0" y="225.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">YOLOv10m, as one sentence</text>
+<rect x="30.0" y="243.5" width="36.0" height="11.5" rx="5.5" fill="#eeeeee" stroke="#5b5b5b" stroke-width="0.8"/>
+<text x="48.0" y="252.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#5b5b5b">limit</text>
+<text x="72.0" y="252.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b" font-style="italic">4 objects · 3 s old</text>
+<rect x="22.0" y="270.0" width="214.0" height="120.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="129.0" y="288.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Memory of people</text>
+<text x="129.0" y="303.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">memory.json on this computer</text>
+<text x="129.0" y="315.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">name · facts · topics</text>
+<text x="129.0" y="327.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">recalled only by name</text>
+<rect x="30.0" y="357.5" width="36.0" height="11.5" rx="5.5" fill="#eeeeee" stroke="#5b5b5b" stroke-width="0.8"/>
+<text x="48.0" y="366.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#5b5b5b">limit</text>
+<text x="72.0" y="366.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b" font-style="italic">5 facts · 50 people</text>
+<text x="72.0" y="380.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b" font-style="italic">forgotten after 24 h</text>
+<rect x="270.0" y="34.0" width="250.0" height="52.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="395.0" y="52.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Conversation history</text>
+<text x="395.0" y="67.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">user + MiRo turns, word for word</text>
+<rect x="270.0" y="94.0" width="250.0" height="62.0" rx="4" fill="#ffffff" stroke="#222222" stroke-width="1.1"/>
+<text x="395.0" y="112.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Speech-to-text</text>
+<text x="395.0" y="127.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">the person's words</text>
+<rect x="278.0" y="137.5" width="36.0" height="11.5" rx="5.5" fill="#eeeeee" stroke="#5b5b5b" stroke-width="0.8"/>
+<text x="296.0" y="146.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#5b5b5b">limit</text>
+<text x="320.0" y="146.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b" font-style="italic">150 tokens</text>
+<rect x="270.0" y="164.0" width="250.0" height="226.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="395.0" y="182.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">The note</text>
+<text x="395.0" y="197.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">one bracketed note in front</text>
+<text x="395.0" y="209.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">of the person's words:</text>
+<text x="395.0" y="221.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333"></text>
+<text x="395.0" y="233.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">Now · self-state · Recently ·</text>
+<text x="395.0" y="245.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">Scene · You remember · reminder</text>
+<text x="395.0" y="257.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333"></text>
+<text x="395.0" y="269.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">no events: "Recently: nothing"</text>
+<text x="395.0" y="281.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">(so the model invents none)</text>
+<rect x="278.0" y="343.5" width="36.0" height="11.5" rx="5.5" fill="#eeeeee" stroke="#5b5b5b" stroke-width="0.8"/>
+<text x="296.0" y="352.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#5b5b5b">limit</text>
+<text x="320.0" y="352.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b" font-style="italic">sections: 300 / 160 / 260 chars</text>
+<text x="320.0" y="366.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b" font-style="italic">over 250 tokens: drop scene,</text>
+<text x="320.0" y="380.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b" font-style="italic">then events, then memory</text>
+<path d="M 236.0 65.0 L 258.0 65.0 L 258.0 196.0 L 270.0 196.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<path d="M 236.0 144.0 L 252.0 144.0 L 252.0 222.0 L 270.0 222.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<path d="M 236.0 227.0 L 252.0 227.0 L 252.0 250.0 L 270.0 250.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<path d="M 236.0 330.0 L 270.0 330.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<text x="253.0" y="325.0" font-size="7.6" font-weight="normal" text-anchor="middle" fill="#5b5b5b" font-style="italic">by name</text>
+<path d="M 395.0 156.0 L 395.0 164.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<rect x="556.0" y="40.0" width="150.0" height="93.3" rx="0" fill="#f1f1f1" stroke="#8c8c8c" stroke-width="1.0"/>
+<rect x="556.0" y="133.3" width="150.0" height="213.5" rx="0" fill="#e6effa" stroke="#2c64ad" stroke-width="1.0"/>
+<rect x="556.0" y="346.8" width="150.0" height="10.7" rx="0" fill="#e6effa" stroke="#2c64ad" stroke-width="1.0"/>
+<rect x="556.0" y="357.5" width="150.0" height="6.4" rx="0" fill="#ffffff" stroke="#222222" stroke-width="1.0"/>
+<rect x="556.0" y="363.9" width="150.0" height="8.5" rx="0" fill="#e3f3ec" stroke="#23845f" stroke-width="1.0"/>
+<rect x="556.0" y="372.5" width="150.0" height="17.5" rx="0" fill="#ffffff" stroke="#d9d9d9" stroke-width="1.0"/>
+<text x="631.0" y="80.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">System prompt</text>
+<text x="631.0" y="95.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">+ 6 examples</text>
+<text x="631.0" y="183.3" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">History</text>
+<line x1="556.0" y1="240.1" x2="706.0" y2="240.1" stroke="#5b5b5b" stroke-dasharray="4 3" stroke-width="1"/>
+<text x="631.0" y="147.3" font-size="8.2" font-weight="normal" text-anchor="middle" fill="#5b5b5b" font-style="italic">high water: 16 turns</text>
+<text x="631.0" y="253.1" font-size="8.2" font-weight="normal" text-anchor="middle" fill="#5b5b5b" font-style="italic">low water: 8 turns</text>
+<text x="720.0" y="74.0" font-size="9.4" font-weight="bold" text-anchor="start" fill="#222222">2,184 tokens, measured</text>
+<text x="720.0" y="88.0" font-size="8.8" font-weight="normal" text-anchor="start" fill="#222222">fixed: llama.cpp keeps it</text>
+<text x="720.0" y="100.0" font-size="8.8" font-weight="normal" text-anchor="start" fill="#222222">in its prompt cache</text>
+<text x="720.0" y="203.3" font-size="9.4" font-weight="bold" text-anchor="start" fill="#222222">up to 4,998 tokens</text>
+<rect x="720.0" y="212.8" width="36.0" height="11.5" rx="5.5" fill="#eeeeee" stroke="#5b5b5b" stroke-width="0.8"/>
+<text x="738.0" y="221.3" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#5b5b5b">limit</text>
+<text x="762.0" y="221.3" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b">past high water, the oldest turns</text>
+<text x="762.0" y="233.3" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b">go in one step down to low water:</text>
+<text x="762.0" y="245.3" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b">the cache misses once per ~8 turns</text>
+<text x="720.0" y="273.3" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b">30-turn test: peak ~3,300 tokens,</text>
+<text x="720.0" y="285.3" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b">trimmed at turns 17 and 25</text>
+<path d="M 706.0 352.2 H 714.0 L 718.0 327.0" fill="none" stroke="#5b5b5b" stroke-width="0.7"/>
+<text x="720.0" y="330.0" font-size="8.8" font-weight="normal" text-anchor="start" fill="#222222">note: up to 250</text>
+<path d="M 706.0 360.7 H 714.0 L 718.0 342.0" fill="none" stroke="#5b5b5b" stroke-width="0.7"/>
+<text x="720.0" y="345.0" font-size="8.8" font-weight="normal" text-anchor="start" fill="#222222">the person's words: up to 150</text>
+<path d="M 706.0 368.2 H 714.0 L 718.0 357.0" fill="none" stroke="#5b5b5b" stroke-width="0.7"/>
+<text x="720.0" y="360.0" font-size="8.8" font-weight="normal" text-anchor="start" fill="#222222">MiRo's reply: up to 200</text>
+<path d="M 706.0 381.2 H 714.0 L 718.0 372.0" fill="none" stroke="#5b5b5b" stroke-width="0.7"/>
+<text x="720.0" y="375.0" font-size="8.8" font-weight="normal" text-anchor="start" fill="#222222">margin: 5%</text>
+<path d="M 520.0 60.0 L 538.0 60.0 L 538.0 158.3 L 556.0 158.3" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<path d="M 520.0 355.4 L 556.0 355.4" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<rect x="22.0" y="434.0" width="230.0" height="92.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="137.0" y="452.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Conversation ends</text>
+<text x="137.0" y="467.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">the whole transcript is kept</text>
+<text x="137.0" y="479.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">(the history may be trimmed)</text>
+<rect x="266.0" y="434.0" width="230.0" height="92.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="381.0" y="452.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Choose what to read</text>
+<text x="381.0" y="467.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">first 4 + last 8 turns</text>
+<text x="381.0" y="479.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">the person's lines; MiRo's</text>
+<text x="381.0" y="491.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">question before a short answer</text>
+<path d="M 252.0 480.0 L 266.0 480.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<rect x="510.0" y="434.0" width="230.0" height="92.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="625.0" y="452.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">One SLM call</text>
+<text x="625.0" y="467.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">JSON schema: name, facts, topics</text>
+<text x="625.0" y="479.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">temperature 0, on the worker</text>
+<rect x="518.0" y="507.5" width="36.0" height="11.5" rx="5.5" fill="#eeeeee" stroke="#5b5b5b" stroke-width="0.8"/>
+<text x="536.0" y="516.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#5b5b5b">limit</text>
+<text x="560.0" y="516.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b" font-style="italic">the only model call</text>
+<path d="M 496.0 480.0 L 510.0 480.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<rect x="754.0" y="434.0" width="230.0" height="92.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="869.0" y="452.0" font-size="10.5" font-weight="bold" text-anchor="middle" fill="#222222">Clean and merge</text>
+<text x="869.0" y="467.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">merge by name, newest first</text>
+<text x="869.0" y="479.0" font-size="9" font-weight="normal" text-anchor="middle" fill="#333">no name: anonymous topic</text>
+<rect x="762.0" y="507.5" width="36.0" height="11.5" rx="5.5" fill="#eeeeee" stroke="#5b5b5b" stroke-width="0.8"/>
+<text x="780.0" y="516.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#5b5b5b">limit</text>
+<text x="804.0" y="516.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#5b5b5b" font-style="italic">drop "asks about" facts</text>
+<path d="M 740.0 480.0 L 754.0 480.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<path d="M 869.0 526.0 L 869.0 538.0 L 16.0 538.0 L 16.0 330.0 L 22.0 330.0" fill="none" stroke="#2c64ad" stroke-width="1.2" marker-end="url(#ah2c64ad)" stroke-linejoin="round"/>
+<rect x="367.9" y="533.8" width="264.3" height="11.2" fill="#ffffff" fill-opacity="0.92"/>
+<text x="500.0" y="541.0" font-size="8.2" font-weight="normal" text-anchor="middle" fill="#2c64ad" font-style="italic">stored; recalled when that name is said in a later conversation</text>
+<rect x="14.0" y="556.0" width="972.0" height="64.0" rx="4" fill="#ffffff" stroke="#d9d9d9" stroke-width="1"/>
+<text x="26.0" y="574.0" font-size="9.2" font-weight="bold" text-anchor="start" fill="#222222">Measured once at start-up:</text>
+<text x="196.0" y="574.0" font-size="9" font-weight="normal" text-anchor="start" fill="#222222">GET /props gives 8,192 tokens per request; /apply-template + /tokenize give the prefix and characters per token.</text>
+<text x="26.0" y="590.0" font-size="9.2" font-weight="bold" text-anchor="start" fill="#222222">Every turn after that:</text>
+<text x="196.0" y="590.0" font-size="9" font-weight="normal" text-anchor="start" fill="#222222">estimates only: no extra model call, no network call. Logged per turn, e.g. [context] prompt ~2754 / 8192 tokens.</text>
+<rect x="26.0" y="600.5" width="36.0" height="11.5" rx="5.5" fill="#eeeeee" stroke="#5b5b5b" stroke-width="0.8"/>
+<text x="44.0" y="609.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#5b5b5b">limit</text>
+<text x="68.0" y="609.0" font-size="9" font-weight="normal" text-anchor="start" fill="#5b5b5b" font-style="italic">a pruning rule</text>
+<rect x="170.0" y="600.0" width="20.0" height="12.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1"/>
+<text x="196.0" y="609.0" font-size="9" font-weight="normal" text-anchor="start" fill="#222222">context harness (offline)</text>
+<rect x="350.0" y="600.0" width="20.0" height="12.0" rx="4" fill="#f1f1f1" stroke="#8c8c8c" stroke-width="1"/>
+<text x="376.0" y="609.0" font-size="9" font-weight="normal" text-anchor="start" fill="#222222">stock MiRo state</text>
+</svg>

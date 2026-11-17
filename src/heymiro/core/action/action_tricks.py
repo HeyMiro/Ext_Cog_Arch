@@ -35,6 +35,9 @@ LINES = {
 
 INTRO_LINE = "Okay! Do some hand signs and I'll show you some tricks!"
 
+# how each trick reads in MiRo's recent events (context harness)
+TRICK_NAMES = {"greet": "greeting nod", "spin": "spin", "ears": "ear wiggle", "party": "party light show"}
+
 # head pose while watching for hand signs (HRI'25 [0, 0.4, 0, 0.1])
 WATCH_LIFT = 0.4
 WATCH_PITCH = 0.1
@@ -159,6 +162,9 @@ class ActionTricks(forebrain_action.ForebrainAction):
 		self.last_gesture_t = stamp
 		self.trick = trick
 		print("[tricks] " + str(gesture.get("gesture")) + " -> " + trick)
+		if hasattr(self.forebrain, "note"):
+			self.forebrain.note("trick", "you did a " + TRICK_NAMES.get(trick, trick) + " when someone showed you a "
+				+ str(gesture.get("gesture")).replace("_", " ") + " hand sign")
 		self.forebrain.say(self.rng.choice(LINES[trick]))
 		self._phase("perform")
 

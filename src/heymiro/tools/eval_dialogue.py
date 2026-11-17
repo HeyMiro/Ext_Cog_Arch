@@ -12,6 +12,10 @@
 #	  - reply length and unsayable characters (emoji, *, markdown)
 #	  - latency: time to the header (emotion + actions), to the first
 #	    sentence, and to the end of the reply (p50 / p95)
+#	  - offline, with the SLM context harness on (features.context): every
+#	    case gets the harness's note, as on the robot, and a set of context
+#	    cases checks that the SLM uses the note (recent events, the scene,
+#	    a remembered person) and does not invent what the note does not say
 #
 #	  python3 tools/eval_dialogue.py                 # all cases
 #	  python3 tools/eval_dialogue.py --repeat 3 -v   # 3 rounds, print each reply
@@ -25,7 +29,9 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -34,6 +40,9 @@ sys.path.insert(0, os.path.join(HERE, "..", "core"))
 import heymiro_config                      # noqa: E402
 from cloud import llm, tools               # noqa: E402
 from cloud.music import SongLibrary        # noqa: E402
+from context.events import EventLog        # noqa: E402
+from context.harness import ContextHarness  # noqa: E402
+from context.memory import MemoryStore     # noqa: E402
 
 
 # (user message, expected actions, expected song id or None)
@@ -88,6 +97,38 @@ CASES = [
 
 UNSAYABLE_RE = re.compile("[*#_`\U0001F000-\U0001FAFF]")
 
+NOW_STR = "Thursday 16 October 2026, 15:00"
+
+# claims of knowing someone, or of having done something
+CLAIMS_TO_REMEMBER = re.compile(r"(?<!n't )(?<!not )\bremember you\b|see you again|great to have you back|"
+	r"welcome back|of course i remember", re.I)
+
+# context harness cases: (name, events [(seconds ago, text)], remembered
+# person record or None, scene, user message, check(reply) -> bool, what
+# the check means)
+CONTEXT_CASES = [
+	("recent event", [(120, "you danced to Dancing Queen by ABBA")], None, None,
+		"What did you just do?", lambda r: re.search(r"danc|dancing queen|abba", r, re.I) is not None,
+		"mentions the dance"),
+	("no event: no invention", [], None, None,
+		"What did you just do?", lambda r: re.search(r"danc|spun|spin|wiggl|ears|trick|nap|slept|sleep", r, re.I) is None,
+		"does not invent an action"),
+	("touch event", [(30, "someone scratched your tail")], None, None,
+		"Are you okay?", lambda r: re.search(r"tail|scratch|ouch|hurt", r, re.I) is not None,
+		"mentions the scratched tail"),
+	("scene", [], None, "Your camera sees: a cup in front of you.",
+		"What can you see right now?", lambda r: re.search(r"\bcup\b", r, re.I) is not None,
+		"mentions the cup"),
+	("remembered person", [], {"name": "Sam", "facts": ["likes ABBA", "has a dog called Max"],
+		"summary": "dancing and dogs"}, None,
+		"Hi MiRo, it's Sam again! Do you remember me?",
+		lambda r: re.search(r"\bsam\b", r, re.I) is not None and re.search(r"abba|max|dog|danc", r, re.I) is not None,
+		"greets Sam and uses a remembered fact"),
+	("stranger: no false memory", [], None, None,
+		"Do you remember me? I'm Alex.", lambda r: CLAIMS_TO_REMEMBER.search(r) is None,
+		"does not claim to remember Alex"),
+]
+
 
 def percentile(xs, p):
 
@@ -100,10 +141,11 @@ def percentile(xs, p):
 	return xs[f] + (xs[c] - xs[f]) * (k - f)
 
 
-def run_case(clients, heymiro, cloud, user):
+def run_case(clients, heymiro, cloud, user, context=None):
 
 	cfg = heymiro.cfg
-	context = llm.context_message(0.6, 0.6, "Thursday 16 October 2026, 15:00")
+	if context is None:
+		context = llm.context_message(0.6, 0.6, NOW_STR)
 	messages = llm.ChatMemory(0).messages(cloud["persona"], context, user, cloud["examples"], heymiro.local)
 	parser = llm.ReplyStream()
 	t0 = time.monotonic()
@@ -138,9 +180,11 @@ def main():
 	songs = SongLibrary(heymiro)
 	song_list = tools.song_choices(songs.songs)
 	persona = heymiro.persona()
+	harnessed = bool(heymiro.local and heymiro.features.get("context"))
 	cloud = {
-		"persona": llm.build_system_prompt(persona, cfg.get("llm.event_name", ""), song_list),
-		"examples": llm.few_shot_messages(song_list),
+		"persona": llm.build_system_prompt(persona, cfg.get("llm.event_name", ""), song_list,
+			context_rules=harnessed),
+		"examples": llm.few_shot_messages(song_list, context_notes=harnessed),
 		"response_format": None if args.no_schema else tools.response_format(song_list),
 		"extra_body": {"chat_template_kwargs": {"enable_thinking": False}, "cache_prompt": True,
 			"top_k": int(cfg.get("ai.local.top_k", 20)), "top_p": float(cfg.get("ai.local.top_p", 0.8))}
@@ -148,7 +192,23 @@ def main():
 	}
 	clients = llm.OpenAIClients(heymiro.route("stt"), heymiro.route("llm"))
 	print("LLM route: " + heymiro.route("llm").base_url + "  model: " + str(cfg.get("llm.model")) +
-		"  schema: " + ("off" if args.no_schema else "on"))
+		"  schema: " + ("off" if args.no_schema else "on") + "  context harness: " + ("on" if harnessed else "off"))
+	tmp = tempfile.mkdtemp(prefix="heymiro_eval_")
+
+	def note_for(events=(), person=None, scene=None, user=""):
+		# the harness note the robot would send (None: the plain HRI line)
+		if not harnessed:
+			return None
+		now = time.time()
+		log = EventLog()
+		for ago_s, text in events:
+			log.add("event", text, now - ago_s)
+		store = MemoryStore(os.path.join(tmp, "memory.json"))
+		store.forget_all()
+		if person:
+			store.remember(person, now - 3600)
+		h = ContextHarness(log, store, cfg.get("ai.local.context"))
+		return h.message(h.snapshot(0.6, 0.6, NOW_STR, scene=scene), user)
 
 	# warm the prompt cache (and the model) once
 	run_case(clients, heymiro, cloud, "Hi!")
@@ -157,7 +217,7 @@ def main():
 	for rnd in range(args.repeat):
 		for user, want, want_song in CASES:
 			try:
-				parser, th, tf, total = run_case(clients, heymiro, cloud, user)
+				parser, th, tf, total = run_case(clients, heymiro, cloud, user, note_for(user=user))
 			except Exception as e:
 				results.append({"user": user, "error": e.__class__.__name__ + " " + str(e)[:120]})
 				print("ERROR %-50s %s" % (user[:50], results[-1]["error"]))
@@ -209,9 +269,31 @@ def main():
 		for key, name in (("t_header", "header"), ("t_first", "first sentence"), ("t_total", "whole reply")):
 			xs = [r[key] for r in ok if r[key] is not None]
 			print("latency to %-15s p50 %.3f s  p95 %.3f s" % (name, percentile(xs, 50), percentile(xs, 95)))
+	ctx_results = []
+	if harnessed:
+		print()
+		print("context harness cases:")
+		for rnd in range(args.repeat):
+			for name, events, person, scene, user, check, means in CONTEXT_CASES:
+				try:
+					parser, th, tf, total = run_case(clients, heymiro, cloud, user,
+						note_for(events, person, scene, user))
+				except Exception as e:
+					ctx_results.append({"case": name, "error": e.__class__.__name__})
+					print("ERROR %-28s %s" % (name, ctx_results[-1]["error"]))
+					continue
+				reply = parser.reply.reply
+				passed = bool(check(reply))
+				ctx_results.append({"case": name, "user": user, "reply": reply, "passed": passed, "means": means})
+				print("%s %-28s %s" % ("ok " if passed else "BAD", name, means))
+				if args.verbose or not passed:
+					print("      " + reply)
+		done = [r for r in ctx_results if "error" not in r]
+		print("context: %d/%d passed" % (sum(r["passed"] for r in done), len(ctx_results)))
+	shutil.rmtree(tmp, True)
 	if args.json:
 		with open(args.json, "w") as f:
-			json.dump(results, f, indent=1)
+			json.dump({"cases": results, "context": ctx_results}, f, indent=1)
 
 
 if __name__ == "__main__":

@@ -151,6 +151,9 @@ class ActionIdentify(forebrain_action.ForebrainAction):
 		if label is not None and label not in self.seen:
 			self.seen.append(label)
 			print("[identify] I see a " + label)
+			if hasattr(self.forebrain, "note"):
+				self.forebrain.note("object", "you saw " + ("an " if label[:1] in "aeiou" else "a ")
+					+ label.replace("_", " ") + " in the object game")
 			self.job = self.forebrain.worker.submit(self._comment, label)
 			self.t_job = self.now()
 			self.phase = "comment"

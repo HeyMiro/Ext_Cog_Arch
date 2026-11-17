@@ -21,6 +21,7 @@ NEW_FILL, NEW_LINE = "#e6effa", "#2c64ad"
 NEW_BAND = "#f5f8fd"
 OFF_FILL, OFF_LINE = "#e3f3ec", "#23845f"
 ON_FILL, ON_LINE = "#fcefe1", "#bf6316"
+LIM_FILL, LIM_LINE = "#eeeeee", "#5b5b5b"
 BAND = "#fafafa"
 BAND_LINE = "#d9d9d9"
 
@@ -65,7 +66,7 @@ class Svg(object):
 		self.lines(x + w / 2, ty + tsize * 0.55 + rsize * 1.15, rows, size=rsize, color="#333")
 
 	def tag(self, x, y, label, kind):
-		fill, line = (OFF_FILL, OFF_LINE) if kind == "off" else (ON_FILL, ON_LINE)
+		fill, line = {"off": (OFF_FILL, OFF_LINE), "on": (ON_FILL, ON_LINE), "lim": (LIM_FILL, LIM_LINE)}[kind]
 		w = 9 + len(label) * 5.4
 		self.rect(x, y - 8.5, w, 11.5, fill=fill, stroke=line, sw=0.8, rx=5.5)
 		self.text(x + w / 2, y, label, size=7.6, weight="bold", color=line)
@@ -180,8 +181,9 @@ def fig_architecture():
 	s.box(B, r1, W, hr, "Dialogue", ["conversation state", "machine, streaming"], "new")
 	s.box(C, r1, W, hr, "Voice", ["speech, clips, music", "mixed on one output"], "new")
 	s.box(A, r2, W, hr, "Scene awareness", ["YOLOv10m objects", "MediaPipe gestures"], "new")
-	s.box(B, r2, C + W - B, hr, "Forebrain integration",
-		["events → intentions · one task slot", "top-down modulation of the brainstem"], "new")
+	s.box(B, r2, W, hr, "Context harness", ["self-state · events", "scene · memory of people"], "new")
+	s.tag(B + W - 50, r2 + 13, "offline", "off")
+	s.box(C, r2, W, hr, "Forebrain integration", ["events → intentions,", "task slot, modulation"], "new", tsize=10.5)
 	# behaviours, a tall box with four actions
 	bh = r2 + hr - r1
 	s.rect(D, r1, E + W - D, bh, fill="#ffffff", stroke=NEW_LINE, sw=1.1)
@@ -205,10 +207,18 @@ def fig_architecture():
 	# inside P3
 	s.arrow([(A + W, r1 + 26), (B, r1 + 26)])
 	s.arrow([(B + W, r1 + 26), (C, r1 + 26)])
-	s.arrow([(A + W - 22, r1 + hr), (A + W - 22, r1 + hr + 13), (B + 26, r1 + hr + 13), (B + 26, r2)])
-	s.label((A + W + B) / 2 + 2, r1 + hr + 10, "wake word, touch noise", size=7.8, bg=True)
-	s.arrow([(cx(B) + 30, r1 + hr), (cx(B) + 30, r2)], tail=True)
+	# hearing -> integration (wake words, touch noise)
+	s.arrow([(A + W - 22, r1 + hr), (A + W - 22, r1 + hr + 8), (C + 40, r1 + hr + 8), (C + 40, r2)])
+	s.label((A + W + B) / 2 + 2, r1 + hr + 5, "wake word, touch", size=7.8, bg=True)
+	# integration <-> dialogue (wake, hand over to a task, resume)
+	s.arrow([(C + 14, r2), (C + 14, r1 + hr + 20), (B + W - 14, r1 + hr + 20), (B + W - 14, r1 + hr)], tail=True)
+	# the harness's note goes in front of the person's words
+	s.arrow([(cx(B) - 20, r2), (cx(B) - 20, r1 + hr)], color=NEW_LINE, sw=1.4)
+	s.label(cx(B) - 20, r2 - 6, "note", size=7.8, bg=True, color=NEW_LINE)
+	# scene -> harness; integration's events -> harness
 	s.arrow([(A + W, r2 + hr / 2), (B, r2 + hr / 2)])
+	s.arrow([(C, r2 + hr / 2 + 10), (B + W, r2 + hr / 2 + 10)])
+	s.label((B + W + C) / 2, r2 + hr / 2 + 4, "", bg=False)
 	s.arrow([(C + W, r2 + hr / 2), (D, r2 + hr / 2)], color=NEW_LINE)
 	s.label((C + W + D) / 2, r2 + hr / 2 - 6, "task", size=7.8, bg=False)
 
@@ -225,8 +235,9 @@ def fig_architecture():
 	s.arrow([(A + W - 25, y2 + h2), (A + W - 25, sb), (D + 30, sb), (D + 30, y2 + h2)])
 	s.label((B + C + W) / 2 + 40, sb + 3, "orient / approach bids", size=7.8)
 	# P3 -> P2
-	s.arrow([(cx(B), r2 + hr), (cx(B), y2)], color=NEW_LINE, dash="4 3")
-	s.label(cx(B), (r2 + hr + y2) / 2 + 3, "affect target")
+	ym = (r2 + hr + y2) / 2
+	s.arrow([(C + 22, r2 + hr), (C + 22, ym - 4), (cx(B), ym - 4), (cx(B), y2)], color=NEW_LINE, dash="4 3")
+	s.label(cx(B) - 2, ym + 9, "affect target")
 	s.arrow([(cx(C), r2 + hr), (cx(C), y2)], color=NEW_LINE, dash="4 3")
 	s.label(cx(C), (r2 + hr + y2) / 2 + 3, "override")
 	s.arrow([(cx(D), r2 + hr), (cx(D), y2)], color=NEW_LINE, sw=1.6)
@@ -283,9 +294,16 @@ def fig_pipeline():
 	YO, YN, HC = 166, 222, 46
 
 	# branch: camera -> YOLO -> scene sentence -> LLM
-	s.box(xs[3], 22, W * 2 + G, 40, "Camera → YOLOv10m", ["\"I can see a cup and a person\""], "new", tsize=10, rsize=8.6)
-	s.arrow([(xs[3] + 2 * W + G, 42), (xs[6] + 26, 42), (xs[6] + 26, YS)])
-	s.label(xs[5] + W / 2 + 4, 38, "scene context", bg=False)
+	cw = W * 4 + 3 * G
+	x0 = xs[1] + W / 2
+	s.rect(x0, 10, cw, 64, fill=NEW_FILL, stroke=NEW_LINE, sw=1.1)
+	s.text(x0 + cw / 2, 27, "Context for the language model, every turn", size=10, weight="bold")
+	s.tag(x0 + 10, 47, "offline", "off")
+	s.text(x0 + 62, 47, "context harness: self-state, recent events, scene, memory of people", size=8.6, anchor="start")
+	s.tag(x0 + 10, 64, "online", "on")
+	s.text(x0 + 62, 64, "HRI '25 line: affect, time, scene (YOLOv10m sentence)", size=8.6, anchor="start")
+	s.arrow([(x0 + cw, 42), (xs[6] + 26, 42), (xs[6] + 26, YS)])
+	s.label((x0 + cw + xs[6]) / 2 + 10, 37, "note", bg=False)
 	# branch: LLM -> body
 	s.box(xs[7], 22, W * 2 + G, 40, "Affect · basal ganglia", ["emotion, valence, arousal, actions"], "stock", tsize=10, rsize=8.6)
 	s.arrow([(xs[6] + W - 22, YS), (xs[6] + W - 22, 42), (xs[7], 42)])
@@ -452,62 +470,140 @@ def fig_deployment():
 
 
 # ---------------------------------------------------------------------------
-# Figure 5: the evaluation harness - what each level covers
+# Figure 5: the context harness of the SLM (offline)
 # ---------------------------------------------------------------------------
 
-def fig_harness():
+def fig_context():
 
-	s = Svg(1000, 330)
+	s = Svg(1000, 630)
 	Svg._markers = {}
-	cols = ["Front\nend", "Voice\nactivity", "Wake\nword", "End of\nturn", "Speech-\nto-text", "Language\nmodel",
-		"Text-to-\nspeech", "Dialogue,\nbehaviours", "Scene\n(YOLO, gest.)"]
-	X0, CW = 180, 58
-	xs = [X0 + i * CW for i in range(len(cols))]
-	YH = 22
-	for i, c in enumerate(cols):
-		a, b = c.split("\n")
-		s.text(xs[i] + CW / 2, YH + 12, a, size=9, weight="bold")
-		s.text(xs[i] + CW / 2, YH + 24, b, size=9, weight="bold")
-		s.add('<line x1="%.1f" y1="%d" x2="%.1f" y2="%d" stroke="%s" stroke-width="0.7"/>'
-			% (xs[i], YH + 34, xs[i], 300, BAND_LINE))
-	s.add('<line x1="%.1f" y1="%d" x2="%.1f" y2="%d" stroke="%s" stroke-width="0.7"/>'
-		% (xs[-1] + CW, YH + 34, xs[-1] + CW, 300, BAND_LINE))
-	XR = xs[-1] + CW + 14
-	s.text(XR, YH + 18, "Measures", size=9.5, weight="bold", anchor="start")
-	s.text(XR + 146, YH + 18, "Last result (offline)", size=9.5, weight="bold", anchor="start")
-	rows = [
-		("Unit tests", "tests/, in CI on every push", [(0, 9)], "stub",
-			["the logic of every module,", "no GPU or network"], ["302 / 302 pass"]),
-		("Stage benchmark", "tools/bench_pipeline.py", [(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (8, 9)], "bar",
-			["each stage alone: F1, word", "error rate in noise, latency"], ["tables in", "TECHNICAL.md §17"]),
-		("LLM evaluation", "tools/eval_dialogue.py", [(5, 6)], "bar",
-			["40 scripted messages: valid", "JSON, action F1, latency"], ["40/40 valid, F1 0.98,", "0.46 s to 1st sentence"]),
-		("Fake user", "tools/fake_user.py, in Gazebo", [(0, 8)], "e2e",
-			["the whole robot: reaction", "time per spoken line"], ["MiRo reacts in", "0.5–1.8 s"]),
+
+	def group(x, y, w, h, title):
+		s.rect(x, y, w, h, fill=BAND, stroke=BAND_LINE, sw=0.9, rx=8)
+		s.text(x + 12, y + 16, title, size=10.5, weight="bold", anchor="start")
+
+	def block(x, y, w, h, title, rows=(), limits=(), kind="new"):
+		# centred title and rows (as in Figures 1-4); limits: pruning
+		# rules at the bottom, each after a grey "limit" pill
+		fill, line = {"new": (NEW_FILL, NEW_LINE), "stock": (STOCK_FILL, STOCK_LINE),
+			"plain": ("#ffffff", INK)}[kind]
+		s.rect(x, y, w, h, fill=fill, stroke=line, sw=1.1)
+		s.text(x + w / 2, y + 18, title, size=10.5, weight="bold")
+		s.lines(x + w / 2, y + 33, rows, size=9, gap=12, color="#333")
+		for i, text in enumerate(limits):
+			ly = y + h - 10 - (len(limits) - 1 - i) * 14
+			if i == 0:
+				s.tag(x + 8, ly, "limit", "lim")
+			s.text(x + 50, ly, text, size=8.6, anchor="start", color=MUTED, italic=True)
+
+	# --- groups ---
+	group(10, 4, 238, 398, "Robot state")
+	group(258, 4, 274, 398, "Every turn")
+	group(542, 4, 448, 398, "One SLM request: 8,192 tokens")
+	group(10, 412, 980, 132, "Once per conversation, after it ends (off the critical path)")
+
+	# --- robot state ---
+	X1, W1 = 22, 214
+	block(X1, 34, W1, 62, "Self-state", ["valence, arousal, sleep", "the running behaviour"], kind="stock")
+	block(X1, 104, W1, 80, "Recent events", ["dances, tricks, object game,", "touch, woken, told to stop"],
+		["10 min · 4 items · merged"])
+	block(X1, 192, W1, 70, "Scene", ["YOLOv10m, as one sentence"], ["4 objects · 3 s old"])
+	block(X1, 270, W1, 120, "Memory of people", ["memory.json on this computer", "name · facts · topics",
+		"recalled only by name"], ["5 facts · 50 people", "forgotten after 24 h"])
+
+	# --- every turn ---
+	X2, W2 = 270, 250
+	block(X2, 34, W2, 52, "Conversation history", ["user + MiRo turns, word for word"])
+	block(X2, 94, W2, 62, "Speech-to-text", ["the person's words"], ["150 tokens"], kind="plain")
+	block(X2, 164, W2, 226, "The note", ["one bracketed note in front", "of the person's words:", "",
+		"Now · self-state · Recently ·", "Scene · You remember · reminder", "",
+		"no events: \"Recently: nothing\"", "(so the model invents none)"],
+		["sections: 300 / 160 / 260 chars", "over 250 tokens: drop scene,", "then events, then memory"])
+	s.arrow([(X1 + W1, 65), (258, 65), (258, 196), (X2, 196)])
+	s.arrow([(X1 + W1, 144), (252, 144), (252, 222), (X2, 222)])
+	s.arrow([(X1 + W1, 227), (252, 227), (252, 250), (X2, 250)])
+	s.arrow([(X1 + W1, 330), (X2, 330)])
+	s.label(253, 325, "by name", size=7.6, bg=False)
+	s.arrow([(X2 + W2 / 2, 156), (X2 + W2 / 2, 164)])
+
+	# --- the request as a stacked bar ---
+	BX, BW, BY, BH, N = 556, 150, 40, 350, 8192.0
+	segs = [("prefix", 2184, STOCK_FILL, STOCK_LINE), ("history", 4998, NEW_FILL, NEW_LINE),
+		("note", 250, NEW_FILL, NEW_LINE), ("words", 150, "#ffffff", INK), ("reply", 200, OFF_FILL, OFF_LINE),
+		("margin", 410, "#ffffff", BAND_LINE)]
+	ys = {}
+	y = BY
+	for key, n, fill, line in segs:
+		h = BH * n / N
+		s.rect(BX, y, BW, h, fill=fill, stroke=line, sw=1.0, rx=0)
+		ys[key] = (y, y + h)
+		y += h
+	s.text(BX + BW / 2, ys["prefix"][0] + 40, "System prompt", size=10.5, weight="bold")
+	s.text(BX + BW / 2, ys["prefix"][0] + 55, "+ 6 examples", size=10.5, weight="bold")
+	hy0, hy1 = ys["history"]
+	s.text(BX + BW / 2, hy0 + 50, "History", size=10.5, weight="bold")
+	low = hy0 + (hy1 - hy0) / 2
+	s.add('<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-dasharray="4 3" stroke-width="1"/>'
+		% (BX, low, BX + BW, low, LIM_LINE))
+	s.text(BX + BW / 2, hy0 + 14, "high water: 16 turns", size=8.2, color=MUTED, italic=True)
+	s.text(BX + BW / 2, low + 13, "low water: 8 turns", size=8.2, color=MUTED, italic=True)
+	LX = BX + BW + 14
+	s.text(LX, ys["prefix"][0] + 34, "2,184 tokens, measured", size=9.4, weight="bold", anchor="start")
+	s.lines(LX, ys["prefix"][0] + 48, ["fixed: llama.cpp keeps it", "in its prompt cache"], size=8.8, anchor="start", gap=12)
+	s.text(LX, hy0 + 70, "up to 4,998 tokens", size=9.4, weight="bold", anchor="start")
+	s.tag(LX, hy0 + 88, "limit", "lim")
+	s.lines(LX + 42, hy0 + 88, ["past high water, the oldest turns", "go in one step down to low water:",
+		"the cache misses once per ~8 turns"], size=8.6, anchor="start", gap=12, color=MUTED)
+	s.lines(LX, hy0 + 140, ["30-turn test: peak ~3,300 tokens,", "trimmed at turns 17 and 25"], size=8.6,
+		anchor="start", gap=12, color=MUTED)
+	small = [("note", "note: up to 250"), ("words", "the person's words: up to 150"),
+		("reply", "MiRo's reply: up to 200"), ("margin", "margin: 5%")]
+	for i, (key, text) in enumerate(small):
+		y0, y1 = ys[key]
+		ty = 330 + i * 15
+		s.add('<path d="M %.1f %.1f H %.1f L %.1f %.1f" fill="none" stroke="%s" stroke-width="0.7"/>'
+			% (BX + BW, (y0 + y1) / 2, LX - 6, LX - 2, ty - 3, MUTED))
+		s.text(LX, ty, text, size=8.8, anchor="start")
+	s.arrow([(X2 + W2, 60), (538, 60), (538, hy0 + 25), (BX, hy0 + 25)])
+	ny = (ys["note"][0] + ys["words"][1]) / 2
+	s.arrow([(X2 + W2, ny), (BX, ny)])
+
+	# --- memory loop ---
+	steps = [
+		("Conversation ends", ["the whole transcript is kept", "(the history may be trimmed)"], []),
+		("Choose what to read", ["first 4 + last 8 turns", "the person's lines; MiRo's",
+			"question before a short answer"], []),
+		("One SLM call", ["JSON schema: name, facts, topics", "temperature 0, on the worker"],
+			["the only model call"]),
+		("Clean and merge", ["merge by name, newest first", "no name: anonymous topic"],
+			["drop \"asks about\" facts"]),
 	]
-	RH, Y0 = 60, 66
-	for r, (name, tool, spans, kind, meas, res) in enumerate(rows):
-		y = Y0 + r * RH
-		if r % 2 == 0:
-			s.rect(10, y, 980, RH, fill="#fafafa", stroke="none", rx=0)
-		s.text(20, y + 26, name, size=10.5, weight="bold", anchor="start")
-		s.text(20, y + 41, tool, size=8.6, anchor="start", color=MUTED)
-		for (a, b) in spans:
-			bx, bw = xs[a] + 4, (b - a) * CW - 8
-			if kind == "stub":
-				s.rect(bx, y + 18, bw, 24, fill="#ffffff", stroke=STOCK_LINE, sw=1, dash="4 3")
-				s.text(bx + bw / 2, y + 34, "every module; models, ROS and keys replaced by stubs", size=8.6, color=MUTED)
-			elif kind == "e2e":
-				s.rect(bx, y + 18, bw, 24, fill=NEW_FILL, stroke=NEW_LINE, sw=1.1)
-				s.text(bx + bw / 2, y + 34, "synthetic voice on /miro/host/mics → real pipeline → MiRo's reaction",
-					size=8.6, color=NEW_LINE)
-			else:
-				s.rect(bx, y + 18, bw, 24, fill=OFF_FILL, stroke=OFF_LINE, sw=1.1)
-		s.lines(XR, y + 26, meas, size=8.6, anchor="start", gap=12)
-		s.lines(XR + 146, y + 26, res, size=8.6, anchor="start", gap=12, weight="bold")
-	s.text(20, 318, "Test speech is synthesised by Kokoro in a voice different from MiRo's, so the right transcript is "
-		"always known; bench_pipeline.py adds noise at 20, 10, 5 and 0 dB SNR.", size=8.6, anchor="start", color=MUTED, italic=True)
-	s.save("fig5_harness")
+	bw, gap, y0 = 230, 14, 434
+	for i, (t, rows, lim) in enumerate(steps):
+		x = 22 + i * (bw + gap)
+		block(x, y0, bw, 92, t, rows, lim)
+		if i:
+			s.arrow([(x - gap, y0 + 46), (x, y0 + 46)])
+	lx = 22 + 3 * (bw + gap) + bw / 2
+	s.arrow([(lx, y0 + 92), (lx, 538), (16, 538), (16, 330), (X1, 330)], color=NEW_LINE)
+	s.label(500, 541, "stored; recalled when that name is said in a later conversation", size=8.2,
+		color=NEW_LINE, bg=True)
+
+	# --- footer strip (as in Figure 2) ---
+	s.rect(14, 556, 972, 64, fill="#ffffff", stroke=BAND_LINE, sw=1)
+	s.text(26, 574, "Measured once at start-up:", size=9.2, weight="bold", anchor="start")
+	s.text(196, 574, "GET /props gives 8,192 tokens per request; /apply-template + /tokenize give the prefix and "
+		"characters per token.", size=9, anchor="start")
+	s.text(26, 590, "Every turn after that:", size=9.2, weight="bold", anchor="start")
+	s.text(196, 590, "estimates only: no extra model call, no network call. Logged per turn, e.g. "
+		"[context] prompt ~2754 / 8192 tokens.", size=9, anchor="start")
+	s.tag(26, 609, "limit", "lim")
+	s.text(68, 609, "a pruning rule", size=9, anchor="start", color=MUTED, italic=True)
+	s.rect(170, 600, 20, 12, fill=NEW_FILL, stroke=NEW_LINE, sw=1)
+	s.text(196, 609, "context harness (offline)", size=9, anchor="start")
+	s.rect(350, 600, 20, 12, fill=STOCK_FILL, stroke=STOCK_LINE, sw=1)
+	s.text(376, 609, "stock MiRo state", size=9, anchor="start")
+	s.save("fig5_context_harness")
 
 
 if __name__ == "__main__":
@@ -515,4 +611,4 @@ if __name__ == "__main__":
 	fig_pipeline()
 	fig_dialogue()
 	fig_deployment()
-	fig_harness()
+	fig_context()

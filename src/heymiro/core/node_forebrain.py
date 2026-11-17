@@ -55,7 +55,13 @@ GESTURE_FRESH_S = 0.5
 # what the dialogue says when a task hands the conversation back
 RESUME_PROMPT = "That was fun! Do you want to keep talking?"
 
-COMMANDS = ("converse", "dance", "tricks", "identify", "stop", "say")
+COMMANDS = ("converse", "dance", "tricks", "identify", "stop", "say", "forget")
+
+# how a finished task reads in MiRo's recent events (context harness)
+TASK_EVENTS = {
+	"tricks": "you played the tricks game",
+	"identify": "you played the object game",
+}
 
 # feature switch that has to be on for each task
 TASK_FEATURES = {"dance": "dance", "tricks": "tricks", "identify": "identify"}
@@ -133,8 +139,10 @@ def make_cloud_services(heymiro):
 			persona = heymiro.persona()
 		except (IOError, OSError):
 			print("[forebrain] WARN persona file not found; using a plain persona")
-		cloud.persona = build_system_prompt(persona, cfg.get("llm.event_name", ""), cloud.song_list)
-		cloud.examples = few_shot_messages(cloud.song_list)
+		cloud.persona = build_system_prompt(persona, cfg.get("llm.event_name", ""), cloud.song_list,
+			context_rules=local and features.get("context", False))
+		cloud.examples = few_shot_messages(cloud.song_list,
+			context_notes=local and features.get("context", False))
 		if features.get("conversation", False):
 			cloud.clients = OpenAIClients(heymiro.route("stt"), heymiro.route("llm"))
 	except Exception as e:
@@ -175,6 +183,62 @@ def make_cloud_services(heymiro):
 			print("[forebrain] Spotify unavailable (" + describe_error(e) + ")")
 
 	return cloud
+
+
+def make_context(heymiro, cloud):
+
+	"""
+	The SLM context harness (offline pipeline only, features.context):
+	recent events, self-state, and the memory of people across
+	conversations (features.memory). None when off.
+	"""
+
+	features = heymiro.features
+	if not (getattr(heymiro, "local", False) and features.get("context", False)):
+		return None, None, None, None
+	from context.events import EventLog
+	from context.harness import ContextHarness
+	cfg = heymiro.cfg
+	ccfg = cfg.get("ai.local.context")
+	get = (lambda k, d: ccfg.get(k, d)) if ccfg is not None else (lambda k, d: d)
+	events = EventLog()
+	memory = None
+	if features.get("memory", False):
+		from context.memory import MemoryStore
+		try:
+			memory = MemoryStore(heymiro.cache_path("memory", "memory.json"),
+				ttl_hours=get("memory.ttl_hours", 24), max_people=get("memory.max_people", 50),
+				max_facts=get("memory.max_facts", 5))
+			print("[forebrain] memory: %(people)d people, %(episodes)d other conversations" % memory.stats())
+		except Exception as e:
+			print("[forebrain] memory unavailable (" + describe_error(e) + ")")
+	chat = None
+	if cloud.clients is not None:
+		model = cfg.get("llm.model", "heymiro")
+		extra = cloud.extra_body
+
+		def chat(messages, response_format):
+			return "".join(cloud.clients.chat_stream(messages, model, temperature=0.0, max_tokens=200,
+				response_format=response_format, extra_body=extra))
+	harness = ContextHarness(events, memory, ccfg, chat)
+	harness.budget = make_budget(heymiro, cloud, ccfg)
+	return events, memory, harness, harness.budget
+
+
+def make_budget(heymiro, cloud, ccfg):
+
+	# measure the window and the fixed prompt prefix once (the only
+	# network calls; every turn after this only estimates)
+	from context import budget as bud
+	prefix = [{"role": "system", "content": cloud.persona}] + list(cloud.examples or [])
+	prefix_chars = sum(len(m["content"]) for m in prefix)
+	n_ctx, prefix_tokens, ratio = bud.calibrate(heymiro.route("llm").base_url, prefix, timeout=2.0)
+	if ratio:
+		# the prefix is mostly prose; history replies are JSON (more tokens per character)
+		ratio *= 0.85
+	b = bud.from_config(ccfg, heymiro.cfg.get("llm.max_tokens", 200), n_ctx, prefix_tokens, ratio, prefix_chars)
+	print("[forebrain] context budget: " + b.describe())
+	return b
 
 
 def check_local_services(heymiro, timeout_s=2.0):
@@ -241,6 +305,10 @@ class NodeForebrain(node.Node):
 		self.worker = worker if worker is not None else CloudWorker(2)
 		self.cloud = cloud if cloud is not None else make_cloud_services(heymiro)
 
+		# the SLM context harness (offline): recent events, memory
+		self.events, self.memory, self.context, self.budget = make_context(heymiro, self.cloud)
+		self._task_params = None
+
 		# commands from the ROS callback thread
 		self.commands = queue.Queue()
 
@@ -290,6 +358,12 @@ class NodeForebrain(node.Node):
 
 		return bool(self.features.get(name, False))
 
+	def note(self, kind, text):
+
+		# one line for the SLM's "Recently: ..." (context harness)
+		if self.events is not None:
+			self.events.add(kind, text, self.wall())
+
 	# ---------------------------------------------------- ROS callback thread
 
 	def on_command(self, text):
@@ -329,6 +403,7 @@ class NodeForebrain(node.Node):
 		params = self._pending[1]
 		self._pending = None
 		self.active_task = name
+		self._task_params = params
 		print("[forebrain] task started: " + name)
 		return params
 
@@ -343,7 +418,22 @@ class NodeForebrain(node.Node):
 			ended = True
 		if ended:
 			print("[forebrain] task ended: " + str(name) + " (" + str(reason) + ")")
+			self._note_task(name, reason)
 		self._maybe_resume_dialogue(reason)
+
+	def _note_task(self, name, reason):
+
+		params = self._task_params or {}
+		self._task_params = None
+		if name == "dance":
+			song = params.get("song")
+			title = getattr(song, "title", "") or "a song"
+			artist = getattr(song, "artist", "")
+			text = "you danced to " + title + (" by " + artist if artist else "")
+		else:
+			text = TASK_EVENTS.get(name)
+		if text:
+			self.note("task", text + (" until you were told to stop" if reason == "stop" else ""))
 
 	def _maybe_resume_dialogue(self, reason):
 
@@ -527,6 +617,9 @@ class NodeForebrain(node.Node):
 		# "Hey MiRo" (or the converse command)
 		affect = self._node("affect")
 		if affect is not None:
+			sleep = getattr(affect, "sleep", None)
+			if sleep is not None and getattr(sleep, "wakefulness", 1.0) < 0.5:
+				self.note("woke", "someone woke you up")
 			affect.wake()
 		cues = self._node("cues")
 		if cues is not None:
@@ -557,6 +650,7 @@ class NodeForebrain(node.Node):
 		self._pending = None
 		if self.active_task is not None:
 			print("[forebrain] task ended: " + self.active_task + " (stop)")
+			self._note_task(self.active_task, "stop")
 			self.active_task = None
 
 	def _handle_command(self, text):
@@ -579,6 +673,13 @@ class NodeForebrain(node.Node):
 			self.stop_all()
 		elif verb == "say":
 			self.say(arg)
+		elif verb == "forget":
+			# clear the context harness's memory of people and events
+			if self.memory is not None:
+				self.memory.forget_all()
+			if self.events is not None:
+				self.events.clear()
+			print("[forebrain] forgot everyone")
 
 	def _on_wake_word(self, keyword):
 
@@ -609,6 +710,7 @@ class NodeForebrain(node.Node):
 		hits.clear()
 		self.touch_ready_at = now + self.touch_cooldown_s
 		print("[forebrain] ouch (" + where + ")")
+		self.note("touch", "someone scratched your " + where)
 		voice = self._node("voice")
 		if voice is not None and not voice.is_speaking():
 			voice.play_clip("ouch_ear" if where == "ear" else "ouch_tail")
@@ -631,6 +733,7 @@ class NodeForebrain(node.Node):
 			return
 		self.purr_ready_at = now + PURR_COOLDOWN_S
 		voice.play_clip("pleased")
+		self.note("touch", "someone stroked you")
 
 	def _spontaneous_tricks(self):
 

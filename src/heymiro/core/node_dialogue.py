@@ -18,6 +18,11 @@
 #	The chat memory holds the user/assistant turns of the current
 #	conversation only; it is cleared when the conversation ends.
 #
+#	Offline pipeline with the context harness (core/context): each turn
+#	carries a snapshot of MiRo's state (self-state, recent events, scene),
+#	and a finished conversation is consolidated into the memory of people
+#	on the worker before the chat memory is cleared.
+#
 
 import datetime
 import time
@@ -49,7 +54,9 @@ class NodeDialogue(node.Node):
 		# cloud: the forebrain node (created before us) owns the clients
 		forebrain = self.nodes.forebrain
 		cloud = forebrain.cloud
-		self.memory = ChatMemory(cfg.get("llm.max_history_turns", 10))
+		# offline: the token budget (context/budget.py) limits the history
+		self.memory = ChatMemory(cfg.get("llm.max_history_turns", 10), budget=getattr(forebrain, "budget", None))
+		self.transcript = []    # the WHOLE conversation, for the memory (never trimmed)
 		self.runner = dlg.TurnRunner(cloud.clients, cloud.tts, self.memory, cloud.persona, cfg,
 			examples=getattr(cloud, "examples", None),
 			response_format=getattr(cloud, "response_format", None),
@@ -162,7 +169,16 @@ class NodeDialogue(node.Node):
 			scene = describe_scene(getattr(self.state, "scene_objects", None))
 			if scene:
 				print("[dialogue] scene context: " + scene)
-		return self.nodes.forebrain.worker.submit(self.runner, pcm, valence, arousal, now_str, progress, scene=scene)
+		forebrain = self.nodes.forebrain
+		harness = getattr(forebrain, "context", None)
+		context = None
+		if harness is not None:
+			sleep = getattr(affect, "sleep", None)
+			awake = sleep is None or getattr(sleep, "wakefulness", 1.0) >= 0.5
+			snap = harness.snapshot(valence, arousal, now_str, awake, forebrain.active_task, scene)
+			context = (harness, snap)
+		return forebrain.worker.submit(self.runner, pcm, valence, arousal, now_str, progress,
+			scene=scene, context=context)
 
 	# ------------------------------------------------------------------- tick
 
@@ -179,6 +195,9 @@ class NodeDialogue(node.Node):
 
 		if name == "started":
 			print("[dialogue] conversation " + str(payload) + " started")
+			self.transcript = []
+			if getattr(forebrain, "context", None) is not None:
+				forebrain.context.start_conversation()
 
 		elif name == "nod":
 			self.nods += 1
@@ -186,6 +205,8 @@ class NodeDialogue(node.Node):
 		elif name == "remember":
 			user, assistant = payload
 			self.memory.add(user, assistant)
+			if getattr(forebrain, "context", None) is not None:
+				self.transcript.append((user, assistant))
 
 		elif name == "reply":
 			reply = payload
@@ -210,10 +231,30 @@ class NodeDialogue(node.Node):
 			if self.features.get("sleep_command", False) and affect is not None:
 				print("[dialogue] going to sleep")
 				affect.request_sleep()
+				if hasattr(forebrain, "note"):
+					forebrain.note("sleep", "you were asked to go to sleep")
 
 		elif name == "ended":
 			print("[dialogue] conversation " + str(payload) + " ended")
+			self._end_context()
 			self.memory.clear()
+
+	def _end_context(self):
+
+		# context harness: note the conversation, and consolidate it into
+		# the memory of people on the worker (off the critical path)
+		forebrain = self.nodes.forebrain
+		harness = getattr(forebrain, "context", None)
+		if harness is None:
+			return
+		# the whole conversation, not the trimmed history (a name given in
+		# the first turn of a long talk must still reach the memory)
+		turns, self.transcript = self.transcript, []
+		name = harness.end_conversation()
+		if turns:
+			forebrain.note("talk", "you talked with " + name if name else "you had a conversation with someone")
+			if harness.memory is not None:
+				forebrain.worker.submit(harness.consolidate, turns, name)
 
 	def shutdown(self):
 

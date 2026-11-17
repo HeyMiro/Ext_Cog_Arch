@@ -50,6 +50,21 @@ ai:
     speed: 1.05
     impression_voice: af_sky    # the Mickey Mouse impression
     impression_pitch: 1.45
+    context:                    # the SLM context harness (core/context; features.context / .memory)
+      self_state: true          # tell the SLM if it is awake, how it feels, what it is doing
+      events:
+        max_age_s: 600          # "Recently: you danced to ..." covers the last 10 minutes
+        max_items: 4
+      memory:
+        ttl_hours: 24           # people are forgotten after this (privacy; one event day)
+        max_people: 50
+        max_facts: 5            # facts kept per person
+      budget:                   # the SLM's context window (context/budget.py); measured at start-up
+        n_ctx: 8192             # fallback if the llm service cannot be asked (16384 / --parallel 2)
+        reserve_user: 150       # tokens always kept for the person's words (longer transcripts are cut)
+        reserve_note: 250       # tokens for the note (scene, then events, then memory are dropped first)
+        high_turns: 16          # history: past this (or past its token budget) ...
+        low_turns: 8            # ... the oldest turns go in one step down to this
     settings:                   # replace these cloud settings when local
       llm:
         model: heymiro          # the llama.cpp alias (Qwen3.5, see docker/local-ai)
@@ -71,6 +86,8 @@ features:
   purr: true                    # pleased noises when stroked
   sleep_command: true           # "go to sleep" honoured
   scene_context: true           # while talking, YOLO tells the LLM what the camera sees (as text)
+  context: true                 # offline only: the SLM context harness (self-state, recent events; ai.local.context)
+  memory: true                  # offline only: remember people across conversations (stored locally, see README)
   spontaneous_gestures: false   # react to hand gestures without being asked
   spotify: false                # optional song lookup (see cloud/music.py); cloud provider only
   log_transcripts: false        # print what users said (privacy: off by default)

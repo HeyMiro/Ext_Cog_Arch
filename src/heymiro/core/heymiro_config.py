@@ -484,6 +484,14 @@ class HeyMiroConfig(object):
 			have["vad"] = "cobra" if have["vad_cobra"] else "energy"
 			have["end_of_turn"] = False
 
+		if not self.local:
+			# the SLM context harness is part of the offline pipeline only;
+			# the online version keeps the HRI'25 prompt exactly
+			have["context"] = False
+			have["memory"] = False
+		elif not have.get("context"):
+			have["memory"] = False
+
 		if have.get("spotify") and self.local:
 			# offline: no network calls at all (the song manifest still works)
 			off("spotify", "off with ai.provider: local (Spotify is an online service)")

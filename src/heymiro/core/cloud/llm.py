@@ -122,6 +122,22 @@ Answer with ONE JSON object and nothing else, with the keys in exactly this orde
 An action looks like {"tool": "spin"} or {"tool": "dance", "song": "any"}.
 """
 
+# the offline pipeline's context harness (core/context/harness.py) puts a
+# bracketed note about MiRo itself in front of each message; these rules
+# say how to use it. Fixed text, so it stays in the cached prompt prefix.
+CONTEXT_INSTRUCTIONS = """
+What you know right now:
+Each message from the person starts with a note in square brackets that is NOT from them: the time, whether you
+are awake and how you feel, what your body did recently, what your camera sees, and what you remember about the
+person if you have talked before.
+- Use the note only when it fits, for example when asked what you did or saw, or to greet someone you remember.
+- Never claim to remember a person, or to have done something, unless the note says so.
+- Never read the note out or mention that you were given it.
+"""
+
+# the last sentence of every turn's context note
+ACTION_REMINDER = "Choose actions from the upcoming message only, and answer in the JSON format given."
+
 # the few-shot block: (user, emotion, valence, arousal, reply, actions);
 # "$abba" is replaced by the bundled ABBA song (or "any")
 FEW_SHOT = (
@@ -137,6 +153,20 @@ FEW_SHOT = (
 		"Wiggle wiggle! Do you like my ears?", ({"tool": "move_ears"},)),
 	("I'm feeling a bit sad today.", "worried", 0.35, 0.45,
 		"Oh no, I'm sorry. Do you want to tell me what happened? I'm a really good listener!", ()),
+)
+
+# with the context harness on, each example's message starts with a note
+# like the live ones (same shape, fixed text), so the small model sees
+# the examples in the format it is asked to answer. One per FEW_SHOT
+# example; the third and fifth show events and a compliment that still
+# need no action.
+EXAMPLE_NOTES = (
+	"You are awake and feeling fine (valence 0.55, arousal 0.50). Recently: nothing; you have just been listening.",
+	"You are awake and feeling happy (valence 0.75, arousal 0.70). Recently: nothing; you have just been listening.",
+	"You are awake and feeling happy (valence 0.85, arousal 0.85). Recently: you danced to a song (just now).",
+	"You are awake and feeling happy (valence 0.80, arousal 0.60). Recently: someone stroked you (just now).",
+	"You are awake and feeling happy (valence 0.80, arousal 0.65). Recently: nothing; you have just been listening.",
+	"You are awake and feeling fine (valence 0.60, arousal 0.50). Recently: nothing; you have just been listening.",
 )
 
 # the HRI object-game prompt (action_obj_detect.py)
@@ -424,27 +454,34 @@ def parse_llm_reply(text):
 
 
 
-def build_system_prompt(persona_template, event_name, song_list=None):
+def build_system_prompt(persona_template, event_name, song_list=None, context_rules=False):
 
-	# safe_substitute: a stray "$" in the persona must not crash start-up
+	# safe_substitute: a stray "$" in the persona must not crash start-up;
+	# context_rules: the offline pipeline's context harness is on
 	persona = string.Template(persona_template or "").safe_substitute(
 		event_name=event_name or "an event")
-	return "\n".join((persona.rstrip(), EMOTION_INSTRUCTIONS,
-		tools.prompt_section(song_list), REPLY_INSTRUCTIONS))
+	parts = [persona.rstrip(), EMOTION_INSTRUCTIONS, tools.prompt_section(song_list), REPLY_INSTRUCTIONS]
+	if context_rules:
+		parts.append(CONTEXT_INSTRUCTIONS)
+	return "\n".join(parts)
 
 
-def few_shot_messages(song_list=None):
+def few_shot_messages(song_list=None, context_notes=False):
 
 	"""
 	The example exchanges, as user/assistant messages in the reply
 	format. Fixed text (no time or affect in them), so a server's prompt
-	cache reuses them across turns and conversations.
+	cache reuses them across turns and conversations. context_notes: start
+	each example message with a bracketed note, as the context harness
+	does for the live ones.
 	"""
 
 	abba = next((s for s in (song_list or ()) if "abba" in s.lower()), tools.ANY_SONG)
 	out = []
-	for user, emotion, valence, arousal, reply, actions in FEW_SHOT:
+	for i, (user, emotion, valence, arousal, reply, actions) in enumerate(FEW_SHOT):
 		acts = [dict((k, abba if v == "$abba" else v) for k, v in a.items()) for a in actions]
+		if context_notes:
+			user = "[" + EXAMPLE_NOTES[i % len(EXAMPLE_NOTES)] + " " + ACTION_REMINDER + "]\n" + user
 		out.append({"role": "user", "content": user})
 		out.append({"role": "assistant", "content": tools.example_reply(emotion, valence, arousal, reply, acts)})
 	return out
@@ -459,7 +496,7 @@ def context_message(valence, arousal, now_str, extra=None):
 		parts.append("Your current valence is %.2f and your current arousal is %.2f." % (valence, arousal))
 	if now_str:
 		parts.append("The current time is " + str(now_str) + ".")
-	parts.append("Choose actions from the upcoming message only, and answer in the JSON format given.")
+	parts.append(ACTION_REMINDER)
 	if extra:
 		parts.append(str(extra))
 	return {"role": "system", "content": " ".join(parts)}
@@ -482,13 +519,21 @@ class ChatMemory(object):
 	The last max_turns (user, assistant) exchanges. The system prompt
 	and the per-turn context are passed in by the caller, never stored.
 	Thread-safe, because turns are built on the CloudWorker.
+
+	With a budget (context.budget.TokenBudget, offline pipeline) the
+	limit is the token budget instead, with hysteresis: past the
+	high-water mark the oldest turns go in one step, down to the
+	low-water mark, so the start of the history (and llama.cpp's prompt
+	cache) stays the same for several turns at a time.
 	"""
 
-	def __init__(self, max_turns=10):
+	def __init__(self, max_turns=10, budget=None):
 
 		self.max_turns = max(0, int(max_turns))
+		self.budget = budget
 		self.turns = collections.deque()
 		self.lock = threading.Lock()
+		self.trims = 0
 
 	def messages(self, system_prompt, context_msg, user_text, examples=None, context_in_user=False):
 
@@ -518,8 +563,45 @@ class ChatMemory(object):
 		# store the model's raw answer, so it keeps seeing its own format
 		with self.lock:
 			self.turns.append((str(user_text), str(assistant_text)))
-			while len(self.turns) > self.max_turns:
+			if self.budget is None:
+				while len(self.turns) > self.max_turns:
+					self.turns.popleft()
+			elif self.budget.over_high(len(self.turns), self._tokens()):
+				self._trim_to_low()
+
+	def _tokens(self):
+
+		est = self.budget.estimate
+		return sum(est(u) + est(a) + 8 for u, a in self.turns)
+
+	def _trim_to_low(self):
+
+		before = len(self.turns)
+		while self.turns and not self.budget.under_low(len(self.turns), self._tokens()):
+			self.turns.popleft()
+		if before != len(self.turns):
+			self.trims += 1
+			print("[context] history trimmed: %d -> %d turns" % (before, len(self.turns)))
+
+	def trim_to_low(self):
+
+		# also used after the server reported a context overflow
+		with self.lock:
+			if self.budget is not None:
+				self._trim_to_low()
+			elif self.turns:
 				self.turns.popleft()
+
+	def tokens(self):
+
+		with self.lock:
+			return self._tokens() if self.budget is not None else 0
+
+	def snapshot(self):
+
+		# a copy of the (user, assistant) turns, e.g. to consolidate them
+		with self.lock:
+			return list(self.turns)
 
 	def clear(self):
 

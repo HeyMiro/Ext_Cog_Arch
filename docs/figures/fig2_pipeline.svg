@@ -1,11 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="372" viewBox="0 0 1000 372" font-family="Helvetica, Arial, 'Liberation Sans', sans-serif">
 <defs><marker id="ah222222" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#222222"/></marker></defs>
 <rect width="100%" height="100%" fill="#ffffff"/>
-<rect x="390.5" y="22.0" width="187.5" height="40.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
-<text x="484.2" y="40.4" font-size="10" font-weight="bold" text-anchor="middle" fill="#222222">Camera → YOLOv10m</text>
-<text x="484.2" y="55.8" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#333">"I can see a cup and a person"</text>
-<path d="M 578.0 42.0 L 715.0 42.0 L 715.0 96.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
-<text x="637.5" y="38.0" font-size="8.4" font-weight="normal" text-anchor="middle" fill="#5b5b5b" font-style="italic">scene context</text>
+<rect x="235.5" y="10.0" width="386.5" height="64.0" rx="4" fill="#e6effa" stroke="#2c64ad" stroke-width="1.1"/>
+<text x="428.8" y="27.0" font-size="10" font-weight="bold" text-anchor="middle" fill="#222222">Context for the language model, every turn</text>
+<rect x="245.5" y="38.5" width="46.8" height="11.5" rx="5.5" fill="#e3f3ec" stroke="#23845f" stroke-width="0.8"/>
+<text x="268.9" y="47.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#23845f">offline</text>
+<text x="297.5" y="47.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#222222">context harness: self-state, recent events, scene, memory of people</text>
+<rect x="245.5" y="55.5" width="41.4" height="11.5" rx="5.5" fill="#fcefe1" stroke="#bf6316" stroke-width="0.8"/>
+<text x="266.2" y="64.0" font-size="7.6" font-weight="bold" text-anchor="middle" fill="#bf6316">online</text>
+<text x="297.5" y="64.0" font-size="8.6" font-weight="normal" text-anchor="start" fill="#222222">HRI '25 line: affect, time, scene (YOLOv10m sentence)</text>
+<path d="M 622.0 42.0 L 715.0 42.0 L 715.0 96.0" fill="none" stroke="#222222" stroke-width="1.2" marker-end="url(#ah222222)" stroke-linejoin="round"/>
+<text x="665.5" y="37.0" font-size="8.4" font-weight="normal" text-anchor="middle" fill="#5b5b5b" font-style="italic">note</text>
 <rect x="788.5" y="22.0" width="187.5" height="40.0" rx="4" fill="#f1f1f1" stroke="#8c8c8c" stroke-width="1.1"/>
 <text x="882.2" y="40.4" font-size="10" font-weight="bold" text-anchor="middle" fill="#222222">Affect · basal ganglia</text>
 <text x="882.2" y="55.8" font-size="8.6" font-weight="normal" text-anchor="middle" fill="#333">emotion, valence, arousal, actions</text>
